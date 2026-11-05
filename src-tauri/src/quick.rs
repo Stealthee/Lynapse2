@@ -12,14 +12,27 @@ const MIC: [&str; 4] = ["Default", "Flat", "Broadcast", "Esports"]; // slot 1 = 
 const FN: [&str; 4] = ["Game/Chat", "Mic Sidetone", "Footsteps", "Bluetooth Volume"];
 const SLEEP: [(u32, &str); 5] = [(0, "Never"), (15, "15 min"), (30, "30 min"), (45, "45 min"), (60, "60 min")];
 
+fn exists(dir: &str, attr: &str) -> bool {
+    Path::new(dir).join(attr).exists()
+}
+fn attr_name<'a>(dir: &str, attr: &'a str) -> &'a str {
+    if exists(dir, attr) { return attr }
+    match attr {
+        "v3pro_sidetone" if exists(dir, "sidetone") => "sidetone",
+        "v3pro_thx_spatial_audio" if exists(dir, "thx_spatial_audio") => "thx_spatial_audio",
+        "v3pro_ultra_low_latency" if exists(dir, "ultra_low_latency") => "ultra_low_latency",
+        "v3pro_power_save" if exists(dir, "wireless_power_save") => "wireless_power_save",
+        _ => attr,
+    }
+}
+fn has(dir: &str, attr: &str) -> bool {
+    exists(dir, attr_name(dir, attr))
+}
 fn rd(dir: &str, attr: &str) -> Option<String> {
-    fs::read_to_string(Path::new(dir).join(attr)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && s != "-1")
+    fs::read_to_string(Path::new(dir).join(attr_name(dir, attr))).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && s != "-1")
 }
 fn num(dir: &str, attr: &str) -> Option<i64> {
     rd(dir, attr).and_then(|s| s.split_whitespace().next().and_then(|t| t.parse().ok()))
-}
-fn has(dir: &str, attr: &str) -> bool {
-    Path::new(dir).join(attr).exists()
 }
 fn sel(label: &str, on: bool) -> String {
     if on { format!("● {label}") } else { format!("   {label}") }
@@ -30,6 +43,43 @@ fn gc_label(v: i64) -> String {
         n if n > 0 => format!("Game +{n}"),
         n => format!("Chat +{}", -n),
     }
+}
+
+fn v3_eq_payload(slot: u8, queried: &str) -> Result<String, String> {
+    if slot >= EQ.len() as u8 {
+        return Err("invalid V3 EQ preset".into());
+    }
+    let mut values = queried.split_whitespace();
+    let queried_slot = values.next().and_then(|v| v.parse::<u8>().ok());
+    if queried_slot != Some(slot) {
+        return Err("V3 EQ slot query did not return the requested preset".into());
+    }
+    let bands: Vec<i8> = values
+        .map(|v| v.parse::<i8>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    if bands.len() != 10 || bands.iter().any(|v| !(-6..=6).contains(v)) {
+        return Err("V3 EQ slot query returned invalid bands".into());
+    }
+    Ok(format!(
+        "{slot} {}",
+        bands
+            .iter()
+            .map(i8::to_string)
+            .collect::<Vec<_>>()
+            .join(" ")
+    ))
+}
+
+fn select_v3_eq(dir: &str, slot: &str) -> Result<(), String> {
+    let slot = slot.parse::<u8>().map_err(|e| e.to_string())?;
+    if slot >= EQ.len() as u8 {
+        return Err("invalid V3 EQ preset".into());
+    }
+    let eq_slot = Path::new(dir).join("eq_slot");
+    fs::write(&eq_slot, slot.to_string()).map_err(|e| e.to_string())?;
+    let queried = fs::read_to_string(&eq_slot).map_err(|e| e.to_string())?;
+    let payload = v3_eq_payload(slot, &queried)?;
+    fs::write(Path::new(dir).join("headphone_eq"), payload).map_err(|e| e.to_string())
 }
 
 /// Padding after a submenu label so KDE's ▸ arrow isn't jammed against the text (em spaces,
@@ -57,8 +107,15 @@ pub fn headset_items<R: Runtime>(app: &AppHandle<R>, dir: &str) -> Items<R> {
             v.push(x);
         }
     };
-    if has(dir, "v3pro_headphone_eq") {
-        let cur = num(dir, "v3pro_headphone_eq").unwrap_or(-1);
+    let eq_attr = if has(dir, "v3pro_headphone_eq") {
+        Some("v3pro_headphone_eq")
+    } else if has(dir, "headphone_eq") && has(dir, "eq_slot") {
+        Some("headphone_eq")
+    } else {
+        None
+    };
+    if let Some(attr) = eq_attr {
+        let cur = num(dir, attr).unwrap_or(-1);
         let name = EQ.get(cur as usize).copied().unwrap_or(if cur >= 5 { "Custom" } else { "?" });
         push(sub(app, format!("Sound EQ: {name}"), EQ.iter().enumerate().map(|(i, n)| (format!("q:eq:{i}"), sel(n, i as i64 == cur))).collect()));
     }
@@ -113,10 +170,14 @@ pub fn headset_items<R: Runtime>(app: &AppHandle<R>, dir: &str) -> Items<R> {
         let cur = num(dir, "game_chat_balance").filter(|v| (0..=20).contains(v)).unwrap_or(-1);
         push(sub(app, format!("Game-Chat Scroll: {}", if cur >= 0 { gc_label(cur) } else { "?".into() }), (0..=20).step_by(2).map(|i| (format!("q:gc:{i}"), sel(&gc_label(i), i == cur))).collect()));
     }
-    if has(dir, "v3pro_power_save") {
+    if exists(dir, "v3pro_power_save") {
         let cur = num(dir, "v3pro_power_save").unwrap_or(-1);
         let name = SLEEP.iter().find(|(m, _)| *m as i64 == cur).map(|x| x.1).unwrap_or("?");
         push(sub(app, format!("Sleep: {name}"), SLEEP.iter().map(|(m, l)| (format!("q:pwr:{m}"), sel(l, *m as i64 == cur))).collect()));
+    } else if exists(dir, "wireless_power_save") {
+        let cur = num(dir, "wireless_power_save").unwrap_or(-1);
+        let choices = [(15, "15 min"), (30, "30 min"), (45, "45 min"), (60, "60 min")];
+        push(sub(app, format!("Sleep: {}", choices.iter().find(|(m, _)| *m == cur).map(|x| x.1).unwrap_or("?")), choices.iter().map(|(m, l)| (format!("q:pwr:{m}"), sel(l, *m == cur))).collect()));
     }
     v
 }
@@ -126,9 +187,14 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, dir: &str, id: &str) -> bool {
     let Some(rest) = id.strip_prefix("q:") else { return false };
     let parts: Vec<&str> = rest.split(':').collect();
     let w = |attr: &str, val: String| {
-        let _ = fs::write(Path::new(dir).join(attr), val);
+        let _ = fs::write(Path::new(dir).join(attr_name(dir, attr)), val);
     };
     match parts.as_slice() {
+        ["eq", n] if exists(dir, "headphone_eq") && exists(dir, "eq_slot") => {
+            if let Err(e) = select_v3_eq(dir, n) {
+                eprintln!("V3 EQ: {e}");
+            }
+        }
         ["eq", n] => w("v3pro_headphone_eq", n.to_string()),
         ["mic", n] => w("mic_eq_preset", n.to_string()),
         ["st", n] => w("v3pro_sidetone", n.to_string()),
@@ -165,4 +231,24 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, dir: &str, id: &str) -> bool {
         _ => return true,
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::v3_eq_payload;
+
+    #[test]
+    fn v3_eq_payload_uses_queried_bands() {
+        assert_eq!(
+            v3_eq_payload(2, "2 1 -2 0 3 4 -1 2 0 5 -3").unwrap(),
+            "2 1 -2 0 3 4 -1 2 0 5 -3"
+        );
+    }
+
+    #[test]
+    fn v3_eq_payload_rejects_mismatched_or_invalid_query() {
+        assert!(v3_eq_payload(2, "1 0 0 0 0 0 0 0 0 0 0").is_err());
+        assert!(v3_eq_payload(2, "2 0 0 0 0 0 0 0 0 0").is_err());
+        assert!(v3_eq_payload(5, "5 0 0 0 0 0 0 0 0 0 0").is_err());
+    }
 }
