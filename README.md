@@ -9,6 +9,17 @@ Every other Razer mouse, headset or keyboard gets a basic page with whatever its
 > Not affiliated with, endorsed by or connected to Razer Inc., THX Ltd. or Dolby Laboratories.
 > "Razer" and "Synapse" are trademarks of Razer Inc.
 
+## Supported devices
+
+| Device | Type | USB ID | Support | Tested firmware | Driver |
+|---|---|---|---|---|---|
+| **Razer BlackShark V3 Pro** | Wireless headset | `1532:0577` (dongle), `1532:0576` (cable) | Full | 1.3.3 | [Patched openrazer driver](https://github.com/Stealthee/openrazer-v3pro-custom-driver) |
+| **Razer BlackShark V3** | Wireless headset | `1532:057a` (dongle), `1532:0579` (cable) | Full (no Pro-only features) | not reported by the driver | [Patched openrazer driver](https://github.com/Stealthee/openrazer-v3pro-custom-driver) |
+| **Razer Viper V3 Pro** | Wireless mouse | `1532:00c1` (dongle), `1532:00c0` (cable) | Full | 1.14 | Stock [openrazer](https://openrazer.github.io) |
+| Any other Razer device | Mouse / headset / keyboard | — | Basic | — | Stock openrazer |
+
+See [Features](#features) for what each one gets. Have a device that isn't listed? [Open an issue](https://github.com/Stealthee/Lynapse2/issues).
+
 ## Screenshots
 
 | Dashboard | Macros |
