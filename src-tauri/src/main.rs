@@ -605,6 +605,73 @@ async fn demo_move(state: tauri::State<'_, Arc<AppState>>, sink: String) -> Resu
 #[tauri::command]
 fn demo_stop(state: tauri::State<'_, Arc<AppState>>) {
     if let Some(mut c) = state.demo.lock().take() { let _ = c.kill(); let _ = c.wait(); }
+    if let Some(mut c) = DEMO_STEREO.lock().take() { let _ = c.kill(); let _ = c.wait(); }
+}
+
+// Spatial Audio demo built from the user's own Synapse install by dsp/synapse/build.py (never shipped:
+// it is Razer content). The audio is already binaural, so it plays to the plain headset sink, not
+// through a spatial filter. Without these files the Demo page shows the original 7.1 clip.
+fn ext_demo_dir() -> PathBuf {
+    dirs::data_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("razerctl/spatial-demo")
+}
+
+#[tauri::command]
+fn demo_ext_info() -> Option<String> {
+    let d = ext_demo_dir();
+    if !d.join("demo.flac").exists() { return None; }
+    fs::read_to_string(d.join("demo.json")).ok()
+}
+
+// A/B: the binaural render (state.demo) and a plain stereo downmix (DEMO_STEREO) start together; the Stereo /
+// Spatial Audio switch only changes which one is audible, so it flips instantly without losing sync.
+static DEMO_STEREO: Mutex<Option<std::process::Child>> = Mutex::new(None);
+
+fn demo_spawn(sink: &str, file: &str, name: &str, audible: bool) -> Result<std::process::Child, String> {
+    // state.restore-props = false: WirePlumber must not restore a remembered (muted) volume onto these streams
+    let props = format!("{{ media.name = \"{name}\" state.restore-props = false }}");
+    Command::new("pw-play")
+        .args(["--target", sink, "--media-role", "Game", "--volume", if audible { "1.0" } else { "0.0" }, "-P", &props])
+        .arg(ext_demo_dir().join(file))
+        .spawn()
+        .map_err(|e| format!("pw-play: {e}"))
+}
+
+#[tauri::command]
+async fn demo_ext_play(state: tauri::State<'_, Arc<AppState>>, sink: String, spatial: bool) -> Result<(), String> {
+    let st = state.inner().clone();
+    blocking(move || {
+        if let Some(mut c) = st.demo.lock().take() { let _ = c.kill(); let _ = c.wait(); }
+        if let Some(mut c) = DEMO_STEREO.lock().take() { let _ = c.kill(); let _ = c.wait(); }
+        let has_stereo = ext_demo_dir().join("demo_stereo.flac").exists();
+        let binaural = demo_spawn(&sink, "demo.flac", "Lynapse demo (Spatial Audio)", spatial || !has_stereo)?;
+        *st.demo.lock() = Some(binaural);
+        if has_stereo {
+            *DEMO_STEREO.lock() = Some(demo_spawn(&sink, "demo_stereo.flac", "Lynapse demo (Stereo)", !spatial)?);
+        }
+        Ok(())
+    })
+    .await
+}
+
+// The A/B switch sets the streams' own PipeWire "volume" prop (the one pw-play --volume sets; pactl's
+// sink-input volume is a separate multiplier). Streams are found by media.name: pw-play streams don't
+// carry application.process.id in pactl's listing.
+#[tauri::command]
+async fn demo_ext_mode(spatial: bool) -> Result<(), String> {
+    blocking(move || {
+        let dump = Command::new("pw-dump").output().map_err(|e| format!("pw-dump: {e}"))?;
+        let objs: Vec<serde_json::Value> = serde_json::from_slice(&dump.stdout).map_err(|e| e.to_string())?;
+        for (name, on) in [("Lynapse demo (Spatial Audio)", spatial), ("Lynapse demo (Stereo)", !spatial)] {
+            for o in &objs {
+                if o["info"]["props"]["media.name"].as_str() != Some(name) { continue }
+                let Some(id) = o["id"].as_u64() else { continue };
+                Command::new("pw-cli").args(["set-param", &id.to_string(), "Props", if on { "{ volume: 1.0 }" } else { "{ volume: 0.0 }" }])
+                    .output().map_err(|e| format!("pw-cli: {e}"))?;
+            }
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -814,7 +881,7 @@ fn main() {
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
             devices, read_attr, read_attr_bytes, write_attr, write_attr_bytes,
-            audio_get, audio_set, open_settings, state_load, state_save, start_page, thx_engines, thx_ok, thx_route, demo_play, demo_move, demo_stop, game_sink, lynapse_config, remap_get, remap_set, macro_play, macro_stop, calib_start, calib_read, calib_stop, smartpoll_get, smartpoll_set, battray_get, battray_set, autostart_get, autostart_set, osd::osd_screens, osd::osd_get, osd::osd_set, osd::osd_preview, gameprof::gp_list, gameprof::gp_save, enhance::enh_get, enhance::enh_set
+            audio_get, audio_set, open_settings, state_load, state_save, start_page, thx_engines, thx_ok, thx_route, demo_play, demo_move, demo_stop, demo_ext_info, demo_ext_play, demo_ext_mode, game_sink, lynapse_config, remap_get, remap_set, macro_play, macro_stop, calib_start, calib_read, calib_stop, smartpoll_get, smartpoll_set, battray_get, battray_set, autostart_get, autostart_set, osd::osd_screens, osd::osd_get, osd::osd_set, osd::osd_preview, gameprof::gp_list, gameprof::gp_save, enhance::enh_get, enhance::enh_set
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

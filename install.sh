@@ -4,6 +4,7 @@
 #   ./install.sh --spatial       app + Spatial Audio (virtual surround filter + free KEMAR HRIR)   = install-with-spatial.sh
 #   ./install.sh --no-spatial    app only                                                          = install-without-spatial.sh
 #   extra flags:  --no-deps (don't install system packages)  --no-autostart  --hrir FILE (use your own 14-ch HeSuVi WAV)
+#                 --gain G --shelf DB (filter level / treble shelf for that HRIR; dsp/synapse/build.py prints them)
 #
 # Installs:  ~/.local/bin/razerctl, menu entry + icon, autostart entry (starts minimised to the tray),
 #            and with --spatial: ~/.local/share/razerctl/thx/<hrir>.wav + ~/.config/pipewire/pipewire.conf.d/60-razerctl-thx.conf
@@ -12,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT=$(pwd)
 
-SPATIAL="" DEPS=1 AUTOSTART=1 HRIR_SRC="$ROOT/assets/spatial/lynapse-kemar.wav"
+SPATIAL="" DEPS=1 AUTOSTART=1 HRIR_SRC="$ROOT/assets/spatial/lynapse-kemar.wav" GAIN=3.17 SHELF=-2.5
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --spatial) SPATIAL=1 ;;
@@ -20,7 +21,9 @@ while [[ $# -gt 0 ]]; do
         --no-deps) DEPS=0 ;;
         --no-autostart) AUTOSTART=0 ;;
         --hrir) HRIR_SRC=$(realpath "$2"); shift ;;
-        -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+        --gain) GAIN="$2"; shift ;;
+        --shelf) SHELF="$2"; shift ;;
+        -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
         *) echo "unknown option: $1 (see --help)"; exit 2 ;;
     esac
     shift
@@ -124,7 +127,8 @@ if [[ $SPATIAL == 1 ]]; then
     else TL="# target.object: no Razer headset found at install time, using the default output"; warn "No Razer headset output found; Spatial Audio will play to your default output. Re-run with the headset connected to pin it."; fi
     [[ -f "$PWCONF" ]] && cp "$PWCONF" "$PWCONF.bak" && echo "Old filter config saved as $PWCONF.bak"
     mkdir -p "$(dirname "$PWCONF")"
-    sed -e "s#@HRIR@#$HRIR#g" -e "s#@TARGET_LINE@#$TL#" packaging/60-razerctl-thx.conf.in > "$PWCONF"
+    [[ "$GAIN" =~ ^[0-9]*\.?[0-9]+$ && "$SHELF" =~ ^-?[0-9]*\.?[0-9]+$ ]] || { echo "--gain/--shelf must be numbers"; exit 2; }
+    sed -e "s#@HRIR@#$HRIR#g" -e "s#@TARGET_LINE@#$TL#" -e "s#@GAIN@#$GAIN#g" -e "s#@SHELF@#$SHELF#g" packaging/60-razerctl-thx.conf.in > "$PWCONF"
     RESTART_PW=1
 else
     if [[ -f "$PWCONF" ]]; then echo "Keeping your existing Spatial Audio filter ($PWCONF)."; fi

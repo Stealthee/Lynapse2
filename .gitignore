@@ -11,3 +11,12 @@ shot.sh
 # proprietary HRIRs must never be committed
 *atmos*.wav
 razer.wav
+# generated locally from a user's own Synapse install - never commit (Razer content)
+.spatial-build/
+*_apo4_data.bin
+*_props.dat
+*.npz
+lynapse-room*.wav
+spatial-demo/
+# editor / manual backups
+*.bak-*

@@ -79,8 +79,13 @@ Spatial Audio is a PipeWire convolution filter that makes stereo game sound feel
 needs an **HRIR** (head-related impulse response) file. Lynapse ships a free one, `assets/spatial/lynapse-kemar.wav`,
 built from the MIT KEMAR dummy-head measurements (see [credits](assets/spatial/CREDITS.md)).
 
-It is **not** Razer's THX Spatial Audio (that is proprietary Windows software). You can use any other 14-channel
+It is **not** Razer's Spatial Audio (that is proprietary Windows software). You can use any other 14-channel
 HeSuVi-format HRIR you are allowed to use: `./install-with-spatial.sh --hrir /path/to/file.wav`.
+
+**Closer to Synapse (optional):** if you dual-boot Windows with Razer Synapse, `dsp/synapse/build.py` builds a Spatial
+Audio filter and Demo-page clip from **your own** Synapse install: the headset's measured HRTF plus the room
+reflections and reverb of your Synapse room preset. Nothing from Razer is shipped in this repo. See
+[dsp/synapse/README.md](dsp/synapse/README.md).
 
 ## Install
 

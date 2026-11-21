@@ -1303,7 +1303,10 @@ function demoSink() {
   if (!thx || !demo.engines.length) return demo.game;
   return (demo.engines.find(e => e.id === mem('demo_engine', demo.engines[0].id)) || demo.engines[0]).sink;
 }
-function demoRoute() { const s = demoSink(); if (s) invoke('demo_move', { sink: s }).catch(toast); }
+function demoRoute() {
+  if (demo.ext) return invoke('demo_ext_mode', { spatial: mem('thx_on', '0') === '1' }).catch(toast);
+  const s = demoSink(); if (s) invoke('demo_move', { sink: s }).catch(toast);
+}
 function demoStop() { clearInterval(demo.timer); demo.playing = false; invoke('demo_stop'); }
 function demoTick() {
   const t = (performance.now() - demo.t0) / 1000;
@@ -1315,7 +1318,82 @@ function demoTick() {
   lbl.textContent = label;
   document.getElementById('demobar').style.width = (100 * t / demo.dur) + '%';
 }
+// Spatial Audio demo from the user's own Synapse install (dsp/synapse/build.py, see demo_ext_info in main.rs): the
+// 12-channel 7.1.4 demo pre-rendered for headphones + a plain stereo version, plus 30 fps levels for the speaker map.
+const SDV = { CX: 235, CY: 235, RE: 190, RT: 105, BG: '#12141a', EAR: '#3cbee6', TOP: '#ffa03c', LFE: '#dc78b4', DOT: '#ffff50', FG: '#ebebeb', DIM: '#6e6e6e' };
+function sdDraw(cv, info, k, trail) {
+  const g = cv.getContext('2d'), V = SDV, f = info.frames[Math.max(0, Math.min(k, info.frames.length - 1))], lv = k < 0 ? null : f[0];
+  g.fillStyle = V.BG; g.fillRect(0, 0, cv.width, cv.height);
+  g.strokeStyle = '#3a3632'; g.lineWidth = 1;
+  for (const r of [V.RE, V.RT]) { g.beginPath(); g.arc(V.CX, V.CY, r, 0, 2 * Math.PI); g.stroke(); }
+  g.font = '13px sans-serif'; g.fillStyle = V.DIM; g.textAlign = 'center';
+  g.fillText('FRONT', V.CX + 55, V.CY - V.RE - 4); g.fillText('BACK', V.CX + 50, V.CY + V.RE + 16);
+  g.fillText('LEFT', V.CX - V.RE - 34, V.CY + 5); g.fillText('RIGHT', V.CX + V.RE + 36, V.CY + 5);
+  g.fillStyle = '#5a5a5a'; g.beginPath(); g.arc(V.CX, V.CY, 22, 0, 2 * Math.PI); g.fill();
+  g.beginPath(); g.moveTo(V.CX - 8, V.CY - 19); g.lineTo(V.CX + 8, V.CY - 19); g.lineTo(V.CX, V.CY - 33); g.fill();
+  trail.forEach(([x, y], j) => { const a = (j + 1) / trail.length; g.globalAlpha = a * 0.6; g.fillStyle = V.DOT; g.beginPath(); g.arc(x, y, 3 + 5 * a, 0, 2 * Math.PI); g.fill(); });
+  g.globalAlpha = 1;
+  info.channels.forEach((c, i) => {
+    if (c.name === 'LFE') return;
+    const r = c.el ? V.RT : V.RE, a = c.az * Math.PI / 180, x = V.CX - r * Math.sin(a), y = V.CY - r * Math.cos(a);
+    const I = lv ? lv[i] : 0, col = c.el ? V.TOP : V.EAR;
+    if (I > 0.05) { g.globalAlpha = 0.35 * I; g.fillStyle = col; g.beginPath(); g.arc(x, y, 14 + 26 * I, 0, 2 * Math.PI); g.fill(); }
+    g.globalAlpha = 0.3 + 0.7 * I; g.fillStyle = col; g.beginPath();
+    if (c.el) { g.moveTo(x, y - 14); g.lineTo(x - 13, y + 10); g.lineTo(x + 13, y + 10); g.closePath(); } else g.arc(x, y, 12, 0, 2 * Math.PI);
+    g.fill(); g.globalAlpha = 1; g.fillStyle = I > 0.4 ? V.FG : V.DIM; g.font = '12px sans-serif'; g.fillText(c.name, x, y + (c.el ? 26 : 28));
+  });
+  if (trail.length) { const [x, y] = trail[trail.length - 1]; g.fillStyle = V.DOT; g.beginPath(); g.arc(x, y, 10, 0, 2 * Math.PI); g.fill(); g.strokeStyle = V.FG; g.beginPath(); g.arc(x, y, 14, 0, 2 * Math.PI); g.stroke(); }
+  // height meter
+  const hx = 520, h0 = 70, h1 = 380, fr = lv ? f[2] : 0;
+  g.textAlign = 'left'; g.fillStyle = V.FG; g.font = '15px sans-serif'; g.fillText('HEIGHT', hx - 8, h0 - 20);
+  g.strokeStyle = '#46413c'; g.strokeRect(hx, h0, 40, h1 - h0); g.fillStyle = V.TOP; g.fillRect(hx + 1, h1 - fr * (h1 - h0), 38, fr * (h1 - h0));
+  g.fillStyle = V.DIM; g.font = '12px sans-serif'; g.fillText('overhead', hx + 48, h0 + 10); g.fillText('ear level', hx + 48, h1);
+  g.fillStyle = V.FG; g.font = '13px sans-serif'; g.fillText(Math.round(100 * fr) + '% from above', hx - 8, h1 + 26);
+  // channel bars
+  const bx = 690, by = 70; g.font = '15px sans-serif'; g.fillText('CHANNEL LEVELS', bx, by - 20);
+  info.channels.forEach((c, i) => {
+    const y = by + i * 25, I = lv ? lv[i] : 0; g.fillStyle = V.DIM; g.font = '12px sans-serif'; g.fillText(c.name, bx, y + 13);
+    g.fillStyle = '#2e2b28'; g.fillRect(bx + 42, y + 2, 240, 13); g.fillStyle = c.name === 'LFE' ? V.LFE : (c.el ? V.TOP : V.EAR); g.fillRect(bx + 42, y + 2, 240 * I, 13);
+  });
+}
+function sdTick(info) {
+  const t = (performance.now() - demo.t0) / 1000, cv = document.getElementById('sdcv');
+  if (!cv) return demoStop();
+  if (t >= info.duration) { demoStop(); demo.trail = []; sdDraw(cv, info, -1, []); if (demo.btn) demo.btn.innerHTML = '▶'; document.getElementById('demobar').style.width = '0%'; document.getElementById('demolbl').textContent = 'Press play'; return; }
+  const k = Math.floor(t * info.fps), v = info.frames[Math.min(k, info.frames.length - 1)][1];
+  if (v[0] || v[1] || v[2]) demo.trail = [...demo.trail, [SDV.CX + SDV.RE * 0.95 * v[0], SDV.CY + SDV.RE * 0.95 * v[2]]].slice(-12);
+  sdDraw(cv, info, k, demo.trail);
+  document.getElementById('demobar').style.width = (100 * t / info.duration) + '%';
+  document.getElementById('demolbl').textContent = t.toFixed(1) + ' s / ' + info.duration.toFixed(1) + ' s  ·  hearing: ' + (mem('thx_on', '0') === '1' ? 'Spatial Audio' : 'Stereo');
+}
+async function extDemoPage(info) {
+  demo.ext = true; demo.trail = [];
+  await thxCheck(); const thx = await getv('v3pro_thx_spatial_audio', mem('thx_on', '0'));
+  demo.game = await invoke('game_sink', { needle: audioNeedle() }).catch(() => null);
+  const btnId = bind(el => {
+    (demo.btn = el).onclick = async () => {
+      if (demo.playing) { demoStop(); el.innerHTML = '▶'; return; }
+      if (!demo.game) return toast('Headset audio output not found');
+      try { await invoke('demo_ext_play', { sink: demo.game, spatial: mem('thx_on', '0') === '1' }); } catch (e) { return toast(e); }
+      demo.playing = true; demo.t0 = performance.now(); demo.trail = []; el.innerHTML = '■';
+      clearInterval(demo.timer); demo.timer = setInterval(() => sdTick(info), 33);
+    };
+    const cv = document.getElementById('sdcv'); if (cv) sdDraw(cv, info, -1, []);
+  });
+  return `${thxSeg(thx)}<p style="text-align:center;font-size:17px">Press play, then switch Stereo / Spatial Audio while it plays to hear the difference.</p>
+    <div style="background:${SDV.BG};border-radius:6px;padding:20px">
+      <div style="position:relative;width:1000px;max-width:100%;margin:0 auto"><canvas id="sdcv" width="1000" height="470" style="width:100%;display:block"></canvas>
+        <button id="${btnId}" class="iconbtn" style="position:absolute;left:23.5%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border:3px solid #fff;border-radius:50%;font-size:22px;background:rgba(0,0,0,.5)">▶</button></div>
+      <div style="display:flex;gap:16px;align-items:center;margin-top:10px"><div id="demolbl" style="font-size:14px;min-width:120px">Press play</div>
+        <div style="flex:1;height:4px;background:#222"><div id="demobar" style="height:4px;width:0;background:var(--green)"></div></div></div>
+      <p class="muted" style="margin-top:12px;font-size:13px">The 12-channel (7.1.4) Spatial Audio demo from your Synapse install. Spatial Audio: pre-rendered for headphones with the measured HRTF, room reflections and reverb. Stereo: the same clip folded down to plain left/right (same loudness), which is what you hear without Spatial Audio. Both play in sync, straight to the headset; the switch flips between them instantly. Top-down view: you are in the middle facing up; triangles are height speakers, the yellow dot is where the sound is. Watch the HEIGHT meter around 16 s and 27 s.</p>
+    </div>`;
+}
+
 PAGES.headset['DEMO'] = async () => {
+  const extInfo = await invoke('demo_ext_info').catch(() => null);
+  if (extInfo) { try { return await extDemoPage(JSON.parse(extInfo)); } catch (e) { console.error(e); } }
+  demo.ext = false;
   await thxCheck(); const thx = await getv('v3pro_thx_spatial_audio', mem('thx_on', '0'));
   demo.engines = await invoke('thx_engines').catch(() => []);
   demo.game = await invoke('game_sink', { needle: audioNeedle() }).catch(() => null);
