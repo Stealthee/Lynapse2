@@ -82,7 +82,11 @@ say "Building Lynapse 2.0 (first build takes a few minutes)"
 # ---------------------------------------------------------------- 4. install the app
 say "Installing the app"
 BIN="$HOME/.local/bin"; mkdir -p "$BIN"
-pkill -9 -x razerctl 2>/dev/null || true
+# close the running copy politely first (a SIGKILL makes systemd mark the autostart entry "failed")
+if pkill -x razerctl 2>/dev/null; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x razerctl >/dev/null || break; sleep 0.3; done
+    pkill -9 -x razerctl 2>/dev/null || true
+fi
 install -m755 src-tauri/target/release/razerctl "$BIN/razerctl.new" && mv "$BIN/razerctl.new" "$BIN/razerctl"
 install -Dm644 src-tauri/icons/icon.png "$HOME/.local/share/icons/hicolor/256x256/apps/razerctl.png"
 DESK="[Desktop Entry]

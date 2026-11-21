@@ -664,6 +664,27 @@ fn reapply_write_only(devs: &[Device], seen: &mut std::collections::HashMap<Stri
     }
 }
 
+// Settings the headset firmware resets on its own (BlackShark V3 Pro turns Ultra Low Latency /
+// HyperSpeed back ON after a power-cycle or reconnect, and ULL on causes audio dropouts). If the
+// live value differs from the one saved in the app, the saved one is written back.
+const ENFORCED: &[&str] = &["v3pro_ultra_low_latency"];
+
+fn enforce_saved(devs: &[Device]) {
+    let st = state_load();
+    for d in devs {
+        let Some(path) = d.active.clone() else { continue };
+        for attr in ENFORCED {
+            let Some(want) = st.get(&d.id).and_then(|x| x.get(*attr)).and_then(|v| v.as_str().map(String::from)) else { continue };
+            let f = PathBuf::from(&path).join(attr);
+            let Ok(cur) = fs::read_to_string(&f) else { continue };
+            if cur.trim() != want.trim() {
+                eprintln!("razerctl: {} {} was {}, restoring saved {}", d.id, attr, cur.trim(), want.trim());
+                let _ = fs::write(&f, &want);
+            }
+        }
+    }
+}
+
 // ---------- state store (~/.config/razerctl/state.json) ----------
 fn state_file() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("razerctl/state.json")
@@ -904,6 +925,9 @@ fn main() {
                         last_title = title;
                     }
                     reapply_write_only(&new, &mut seen);
+                    if changed || tick % 5 == 0 {
+                        enforce_saved(&new);
+                    }
                     if changed || tick % 15 == 0 {
                         let _ = handle.emit("devices", new.clone());
                         if let Some(t) = st.tray.lock().as_ref() {
