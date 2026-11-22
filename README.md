@@ -1,4 +1,7 @@
-# Lynapse 2.0
+# Lynapse 2.1
+
+**New in 2.1:** BlackShark V3 support, Spatial Audio from your own Synapse install, a new Demo page, and Audio/Mic
+Enhancement using Synapse's own settings. See the [changelog](CHANGELOG.md).
 
 **Razer device settings for Linux, laid out like Razer Synapse.** A small tray app (Rust + Tauri) that talks to your
 devices through the [openrazer](https://openrazer.github.io) kernel driver and to your audio through PipeWire.

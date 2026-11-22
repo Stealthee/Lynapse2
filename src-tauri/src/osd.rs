@@ -270,13 +270,13 @@ fn notify_t(replaces: u32, summary: &str, body: &str, value: i64, timeout: i32) 
     hints.insert("value", Value::from(value.clamp(0, 100) as i32));
     hints.insert("transient", Value::from(true)); // keep it out of the notification history
     hints.insert("urgency", Value::from(0u8));
-    hints.insert("x-kde-display-appname", Value::from("Lynapse 2.0"));
+    hints.insert("x-kde-display-appname", Value::from("Lynapse 2.1"));
     let r = c.call_method(
         Some("org.freedesktop.Notifications"),
         "/org/freedesktop/Notifications",
         Some("org.freedesktop.Notifications"),
         "Notify",
-        &("Lynapse 2.0", replaces, "audio-headset", summary, body, Vec::<&str>::new(), hints, timeout),
+        &("Lynapse 2.1", replaces, "audio-headset", summary, body, Vec::<&str>::new(), hints, timeout),
     );
     if let Err(e) = &r {
         eprintln!("osd: notify failed: {e}");

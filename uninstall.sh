@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove Lynapse 2.0. Your settings (~/.config/razerctl) are kept unless you pass --purge.
+# Remove Lynapse 2.1. Your settings (~/.config/razerctl) are kept unless you pass --purge.
 set -euo pipefail
 pkill -9 -x razerctl 2>/dev/null || true
 rm -f "$HOME/.local/bin/razerctl" "$HOME/.local/share/applications/razerctl.desktop" "$HOME/.config/autostart/razerctl.desktop" \
@@ -18,4 +18,4 @@ if [[ "${1:-}" == "--purge" ]]; then
     echo "Settings removed."
 fi
 [[ $pw == 1 ]] && systemctl --user restart pipewire pipewire-pulse wireplumber || true
-echo "Lynapse 2.0 removed."
+echo "Lynapse 2.1 removed."

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lynapse 2.0 installer (per user, no root needed except for installing missing system packages).
+# Lynapse 2.1 installer (per user, no root needed except for installing missing system packages).
 #
 #   ./install.sh --spatial       app + Spatial Audio (virtual surround filter + free KEMAR HRIR)   = install-with-spatial.sh
 #   ./install.sh --no-spatial    app only                                                          = install-without-spatial.sh
@@ -79,7 +79,7 @@ if ! ls -d /sys/bus/hid/drivers/razer* >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------- 3. build
-say "Building Lynapse 2.0 (first build takes a few minutes)"
+say "Building Lynapse 2.1 (first build takes a few minutes)"
 ( cd src-tauri && cargo build --release )
 
 # ---------------------------------------------------------------- 4. install the app
@@ -94,7 +94,7 @@ install -m755 src-tauri/target/release/razerctl "$BIN/razerctl.new" && mv "$BIN/
 install -Dm644 src-tauri/icons/icon.png "$HOME/.local/share/icons/hicolor/256x256/apps/razerctl.png"
 DESK="[Desktop Entry]
 Type=Application
-Name=Lynapse 2.0
+Name=Lynapse 2.1
 Comment=Razer device settings for Linux (Synapse-style)
 Exec=$BIN/razerctl
 Icon=razerctl
@@ -104,7 +104,7 @@ install -Dm644 /dev/stdin "$HOME/.local/share/applications/razerctl.desktop" <<<
 if [[ $AUTOSTART == 1 ]]; then
     install -Dm644 /dev/stdin "$HOME/.config/autostart/razerctl.desktop" <<< "[Desktop Entry]
 Type=Application
-Name=Lynapse 2.0
+Name=Lynapse 2.1
 Exec=$BIN/razerctl --hidden
 Icon=razerctl
 X-GNOME-Autostart-enabled=true
@@ -140,11 +140,11 @@ if [[ $RESTART_PW == 1 ]]; then
 fi
 
 # ---------------------------------------------------------------- 6. start
-say "Starting Lynapse 2.0"
+say "Starting Lynapse 2.1"
 ( setsid "$BIN/razerctl" >/dev/null 2>&1 & )
 cat <<EOF
 
-Done. Lynapse 2.0 is in your app menu and system tray$([[ $AUTOSTART == 1 ]] && echo ", and starts at login").
+Done. Lynapse 2.1 is in your app menu and system tray$([[ $AUTOSTART == 1 ]] && echo ", and starts at login").
   Spatial Audio: $([[ $SPATIAL == 1 ]] && echo "installed (switch it on in the headset's SOUND tab)" || echo "not installed (re-run ./install-with-spatial.sh to add it)")
   Audio / Mic Enhancement: built in (headset ENHANCEMENT and MIC tabs; the first switch-on restarts PipeWire once)
   Uninstall: ./uninstall.sh

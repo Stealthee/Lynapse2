@@ -371,7 +371,7 @@ const kindOf = tab => tab === 'home' || tab === 'macro' ? tab : (devices.find(d 
 const icon = kind => kind === 'mouse' ? ART.mouseIcon : kind === 'headset' ? ART.headsetIcon : ART.kbdIcon;
 
 function renderTabs() {
-  const t = [`<div class="tab ${view.tab === 'home' ? 'active' : ''}" data-tab="home"><span class="ic round">${ART.homeIcon}</span>Lynapse 2.0</div>`,
+  const t = [`<div class="tab ${view.tab === 'home' ? 'active' : ''}" data-tab="home"><span class="ic round">${ART.homeIcon}</span>Lynapse 2.1</div>`,
   `<div class="tab ${view.tab === 'macro' ? 'active' : ''}" data-tab="macro"><span class="ic round">M</span>Macro</div>`];
   for (const d of devices) t.push(`<div class="tab ${view.tab === d.id ? 'active' : ''} ${d.active ? '' : 'offline'}" data-tab="${esc(d.id)}"><span class="ic">${icon(d.kind)}</span>${esc(d.name.replace(/^Razer /, ''))}</div>`);
   $('#tabs').innerHTML = t.join('');
@@ -1429,12 +1429,12 @@ async function openSettings() {
   const osdOpts = [['tray', 'Near the tray (KDE notification)'], ...screens.map(s => [s.name, `Screen ${s.id}: ${s.name} ${where(s.geometry)}`]), ['off', 'Off']];
   binders = [];
   $('#modal').innerHTML = `<div class="card">${'<h3>Settings</h3>'}
-    <div class="row">Start Lynapse 2.0 at login (minimised to tray) ${toggle(auto, on => invoke('autostart_set', { on }).catch(toast))}</div>
+    <div class="row">Start Lynapse 2.1 at login (minimised to tray) ${toggle(auto, on => invoke('autostart_set', { on }).catch(toast))}</div>
     <div class="row">Scroll-wheel pop-up <select id="${bind(el => el.onchange = () => { osdPick = el.value; invoke('osd_preview', { screen: el.value }).catch(toast); })}">${osdOpts.map(([v, t]) => `<option value="${esc(v)}" ${v === osdScreen ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
     <p class="muted" style="font-size:13px;margin-top:-6px">Currently: <b style="color:#ddd">${esc((osdOpts.find(o => o[0] === osdScreen) || ['', osdScreen])[1])}</b>. Picking another shows a sample there; Save &amp; Close keeps it.</p>
     <div class="row ${NA}">Check for updates ${toggle(false)}</div>
     <div class="row ${NA}">Theme ${seg([{ v: 'd', label: 'Dark' }, { v: 'l', label: 'Light' }], 'd')}</div>
-    <p class="muted" style="font-size:13px">Closing the window keeps Lynapse 2.0 in the tray. Use the tray menu → Quit to exit.</p>
+    <p class="muted" style="font-size:13px">Closing the window keeps Lynapse 2.1 in the tray. Use the tray menu → Quit to exit.</p>
     <div style="text-align:right;display:flex;gap:12px;justify-content:flex-end">
       <span class="flatbtn" id="${bind(el => el.onclick = () => { invoke('osd_preview', { screen: null }); $('#modal').style.display = 'none'; })}">Cancel</span>
       <button class="greenbtn" id="${bind(el => el.onclick = async () => {
@@ -1498,13 +1498,13 @@ $('#help').onclick = async () => {
   let ver = '';
   try { ver = await window.__TAURI__.app.getVersion(); } catch (_) {}
   $('#modal').innerHTML = `<div class="card" style="max-width:520px">
-    <h3 style="margin-top:0">Lynapse 2.0${ver ? ` <span class="muted" style="font-size:14px">v${esc(ver)}</span>` : ''}</h3>
+    <h3 style="margin-top:0">Lynapse 2.1${ver ? ` <span class="muted" style="font-size:14px">v${esc(ver)}</span>` : ''}</h3>
     <p>Created by <b>ShenaniganJoe</b>.</p>
     <p>Built and tested with <b>BlackShark V3 Pro firmware 1.3.3</b> (and Viper V3 Pro firmware 1.14).
       Newer or older firmware may experience issues.</p>
     <p>Want another device supported? Email <b style="user-select:text">j71rivera@gmail.com</b> with interface screenshots (the device's pages in Synapse)
       and he'll see what he can do.</p>
-    <p>If you like Lynapse 2.0, feel free to donate to his Cash App: <b style="user-select:text">$j71rivera</b></p>
+    <p>If you like Lynapse 2.1, feel free to donate to his Cash App: <b style="user-select:text">$j71rivera</b></p>
     <p class="muted" style="font-size:13px">Not affiliated with Razer. Device control goes through the openrazer driver.</p>
     <div style="text-align:right"><button class="greenbtn" id="aboutok">OK</button></div></div>`;
   $('#modal').style.display = 'grid';

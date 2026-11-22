@@ -797,7 +797,7 @@ fn autostart_set(on: bool) -> Result<(), String> {
         fs::create_dir_all(f.parent().unwrap()).map_err(|e| e.to_string())?;
         fs::write(
             &f,
-            format!("[Desktop Entry]\nType=Application\nName=Lynapse 2.0\nExec={} --hidden\nIcon=razerctl\nX-GNOME-Autostart-enabled=true\n", exe.display()),
+            format!("[Desktop Entry]\nType=Application\nName=Lynapse 2.1\nExec={} --hidden\nIcon=razerctl\nX-GNOME-Autostart-enabled=true\n", exe.display()),
         )
         .map_err(|e| e.to_string())
     } else {
@@ -817,7 +817,7 @@ fn show_main(app: &AppHandle) {
 
 /// Hover text of the main tray icon: app name + battery of each connected device.
 fn tray_title(devs: &[Device]) -> String {
-    let mut s = format!("Lynapse 2.0 (v{})", env!("CARGO_PKG_VERSION"));
+    let mut s = format!("Lynapse 2.1 (v{})", env!("CARGO_PKG_VERSION"));
     for d in devs.iter().filter(|d| d.active.is_some()) {
         let name = d.name.trim_start_matches("Razer ");
         match d.battery {
@@ -854,7 +854,7 @@ fn build_menu(app: &AppHandle, devs: &[Device]) -> tauri::Result<Menu<tauri::Wry
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "show", "Open Lynapse 2.0", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "show", "Open Lynapse 2.1", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?)?;
     Ok(menu)
 }
@@ -888,7 +888,7 @@ fn main() {
             let devs = state.devices.lock().clone();
             let tray = TrayIconBuilder::with_id("main")
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
-                .tooltip(concat!("Lynapse 2.0 (v", env!("CARGO_PKG_VERSION"), ")"))
+                .tooltip(concat!("Lynapse 2.1 (v", env!("CARGO_PKG_VERSION"), ")"))
                 .title(tray_title(&devs))
                 .menu(&build_menu(&handle, &devs)?)
                 .show_menu_on_left_click(false)

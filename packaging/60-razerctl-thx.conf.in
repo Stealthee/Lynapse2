@@ -1,4 +1,4 @@
-# Lynapse 2.0 Spatial Audio: 2-channel binaural convolver sink (HRTF stereo widening via PipeWire filter-chain).
+# Lynapse 2.1 Spatial Audio: 2-channel binaural convolver sink (HRTF stereo widening via PipeWire filter-chain).
 # Installed by install-with-spatial.sh, which fills in the HRIR path and the headset output below.
 # Node names keep the historical "razerctl-thx" names, which the app looks for.
 context.modules = [
