@@ -198,7 +198,10 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, dir: &str, id: &str) -> bool {
         ["eq", n] => w("v3pro_headphone_eq", n.to_string()),
         ["mic", n] => w("mic_eq_preset", n.to_string()),
         ["st", n] => w("v3pro_sidetone", n.to_string()),
-        ["gc", n] => w("game_chat_balance", n.to_string()),
+        ["gc", n] => {
+            if let Ok(v) = n.parse::<i64>() { crate::osd::gc_lock_follow(v) }
+            w("game_chat_balance", n.to_string())
+        }
         ["fn", n] => w("audio_function_button", n.to_string()),
         ["pwr", n] => w("v3pro_power_save", n.to_string()),
         ["anc", "0"] => {

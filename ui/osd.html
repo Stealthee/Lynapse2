@@ -10,6 +10,7 @@
   #box.on { opacity: 1; }
   #t { font-size: 17px; margin-bottom: 10px; display: flex; justify-content: space-between; }
   #t b { color: #44d62c; font-weight: 600; }
+  #note { font-size: 13px; color: #f0b429; margin: -4px 0 10px; display: none; }
   .row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #9a9a9a; }
   .track { position: relative; flex: 1; height: 8px; background: #333; border-radius: 4px; }
   .fill { position: absolute; top: 0; bottom: 0; background: #44d62c; border-radius: 4px; }
@@ -17,9 +18,9 @@
 </style>
 </head>
 <body>
-<div id="box"><div id="t"><span id="name"></span><b id="val"></b></div><div class="row"><span id="l"></span><div class="track" id="track"></div><span id="r"></span></div></div>
+<div id="box"><div id="t"><span id="name"></span><b id="val"></b></div><div id="note"></div><div class="row"><span id="l"></span><div class="track" id="track"></div><span id="r"></span></div></div>
 <script>
-// Fed by the backend: { title, value, left, right, center (bool), pos (0..1), off (-1..1 when center) }
+// Fed by the backend: { title, value, left, right, center (bool), pos (0..1), off (-1..1 when center), note (optional) }
 const box = document.getElementById('box');
 let hideT;
 window.__TAURI__.event.listen('osd', ({ payload: p }) => {
@@ -27,6 +28,8 @@ window.__TAURI__.event.listen('osd', ({ payload: p }) => {
   if (p.hide) { box.classList.remove('on'); return; }
   document.getElementById('name').textContent = p.title;
   document.getElementById('val').textContent = p.value;
+  const note = document.getElementById('note');
+  note.textContent = p.note || ''; note.style.display = p.note ? 'block' : 'none';
   document.getElementById('l').textContent = p.left;
   document.getElementById('r').textContent = p.right;
   const tr = document.getElementById('track');

@@ -881,7 +881,7 @@ fn main() {
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
             devices, read_attr, read_attr_bytes, write_attr, write_attr_bytes,
-            audio_get, audio_set, open_settings, state_load, state_save, start_page, thx_engines, thx_ok, thx_route, demo_play, demo_move, demo_stop, demo_ext_info, demo_ext_play, demo_ext_mode, game_sink, lynapse_config, remap_get, remap_set, macro_play, macro_stop, calib_start, calib_read, calib_stop, smartpoll_get, smartpoll_set, battray_get, battray_set, autostart_get, autostart_set, osd::osd_screens, osd::osd_get, osd::osd_set, osd::osd_preview, gameprof::gp_list, gameprof::gp_save, enhance::enh_get, enhance::enh_set
+            audio_get, audio_set, open_settings, state_load, state_save, start_page, thx_engines, thx_ok, thx_route, demo_play, demo_move, demo_stop, demo_ext_info, demo_ext_play, demo_ext_mode, game_sink, lynapse_config, remap_get, remap_set, macro_play, macro_stop, calib_start, calib_read, calib_stop, smartpoll_get, smartpoll_set, battray_get, battray_set, autostart_get, autostart_set, osd::osd_screens, osd::osd_get, osd::osd_set, osd::osd_preview, osd::gc_lock_get, osd::gc_lock_set, gameprof::gp_list, gameprof::gp_save, enhance::enh_get, enhance::enh_set
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

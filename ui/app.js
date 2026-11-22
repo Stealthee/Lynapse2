@@ -1112,6 +1112,7 @@ PAGES.headset['SOUND'] = async d => {
   await thxCheck(); const thx = await getv('v3pro_thx_spatial_audio', '0');
   let eq = Number.parseInt(await getv('v3pro_headphone_eq', '0'), 10); if (!(eq >= 0 && eq < 5)) eq = 0;
   const gc = +(await getv('game_chat_balance', '10'));
+  let gcCur = gc, gcLocked = (await invoke('gc_lock_get').catch(() => null)) != null;
   const vol = await audioGet('game');
   const volOn = mem('vol_section_on', true) !== false;
   const volWrap = 'volwrap' + (++uid);
@@ -1159,7 +1160,14 @@ PAGES.headset['SOUND'] = async d => {
           ${vol == null ? '<p class="muted">Headset audio output not found in PipeWire.</p>' : slider({ min: 0, max: 100, val: vol, ends: ['0', '100'], onInput: v => (lastWrite = Date.now(), invoke('audio_set', { kind: 'game', needle: audioNeedle(), value: v }).catch(toast)) })}
           <a href="#" style="color:#ddd;font-size:17px;display:inline-block;margin:10px 0 18px" id="${bind(el => el.onclick = e => { e.preventDefault(); invoke('open_settings', { which: 'mixer' }).catch(() => invoke('open_settings', { which: 'sound' }).catch(toast)); })}">Volume Mixer ↗</a>
           <div class="label">Game/Chat Balance</div>
-          ${has('game_chat_balance') ? slider({ min: 0, max: 20, val: gc, nobubble: true, ends: ['🎧 MORE CHAT', 'MORE GAME 🎮', '|'], onInput: v => wr('game_chat_balance', v) }) : '<p class="muted">Not supported.</p>'}
+          ${has('game_chat_balance') ? slider({ min: 0, max: 20, val: gc, nobubble: true, ends: ['🎧 MORE CHAT', 'MORE GAME 🎮', '|'], onInput: async v => {
+              gcCur = +v;
+              if (gcLocked) await invoke('gc_lock_set', { value: gcCur }).catch(toast); // move the lock first, or it would undo this
+              wr('game_chat_balance', v);
+            } }) + `<div class="row" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">Lock balance ${toggle(gcLocked, on => {
+              gcLocked = on; invoke('gc_lock_set', { value: on ? gcCur : null }).catch(toast);
+            })}</div>
+            <p class="muted" style="font-size:13px;margin-top:6px">Keeps the balance where it is: if the headset wheel changes it, Lynapse puts it back. The slider still works while locked.</p>` : '<p class="muted">Not supported.</p>'}
           </div>
         </div>
         ${card('Sound Properties', `<a href="#" style="color:#ddd;font-size:17px" id="${bind(el => el.onclick = e => { e.preventDefault(); invoke('open_settings', { which: 'sound' }).catch(toast); })}">Open System Sound Settings</a>`)}

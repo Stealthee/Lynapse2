@@ -286,7 +286,48 @@ fn notify_t(replaces: u32, summary: &str, body: &str, value: i64, timeout: i32) 
 
 enum Kind {
     GameChat(i64),
+    GameChatLocked(i64),
     Sidetone(i64),
+}
+
+// ---------- Game/Chat balance lock ----------
+// When on, a turn of the headset wheel is undone: the poll below writes the locked value straight back.
+// Saved in ~/.config/razerctl/game_chat_lock (the locked value, 0..=20); no file = unlocked.
+fn lock_path() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("razerctl/game_chat_lock")
+}
+static GC_LOCK: LazyLock<Mutex<Option<i64>>> = LazyLock::new(|| {
+    Mutex::new(fs::read_to_string(lock_path()).ok().and_then(|s| s.trim().parse().ok()).filter(|v| (0..=20).contains(v)))
+});
+
+#[tauri::command]
+pub fn gc_lock_get() -> Option<i64> {
+    *GC_LOCK.lock()
+}
+
+/// value = Some(0..=20) locks the balance there, None unlocks.
+#[tauri::command]
+pub fn gc_lock_set(value: Option<i64>) -> Result<(), String> {
+    let value = value.filter(|v| (0..=20).contains(v));
+    let p = lock_path();
+    match value {
+        Some(v) => {
+            let _ = fs::create_dir_all(p.parent().unwrap());
+            fs::write(&p, v.to_string()).map_err(|e| e.to_string())?;
+        }
+        None => {
+            let _ = fs::remove_file(&p);
+        }
+    }
+    *GC_LOCK.lock() = value;
+    Ok(())
+}
+
+/// Balance changed from inside Lynapse (tray menu): move the lock along if it is on.
+pub fn gc_lock_follow(value: i64) {
+    if GC_LOCK.lock().is_some() {
+        let _ = gc_lock_set(Some(value));
+    }
 }
 
 fn side(off: i64) -> String {
@@ -315,6 +356,10 @@ impl Shower {
                     let off = gc - 10;
                     serde_json::json!({ "title": "Game / Chat", "value": side(off), "left": "Chat", "right": "Game", "center": true, "off": off as f64 / 10.0 })
                 }
+                Kind::GameChatLocked(gc) => {
+                    let off = gc - 10;
+                    serde_json::json!({ "title": "Game / Chat locked", "value": side(off), "note": "Tried to change it from the headset. Unlock it in Lynapse to change it.", "left": "Chat", "right": "Game", "center": true, "off": off as f64 / 10.0 })
+                }
                 Kind::Sidetone(st) => {
                     serde_json::json!({ "title": "Mic Sidetone", "value": st.to_string(), "left": "0", "right": "15", "center": false, "pos": st as f64 / 15.0 })
                 }
@@ -330,6 +375,8 @@ impl Shower {
         self.shown_at = Instant::now();
         self.id = match k {
             Kind::GameChat(gc) => notify(self.id, &format!("Game / Chat: {}", side(gc - 10)), &format!("Chat  {}  Game", center_bar(gc - 10)), gc * 5),
+            Kind::GameChatLocked(gc) => notify(self.id, "Game / Chat balance is locked",
+                &format!("Tried to change it from the headset. To change it, unlock it in Lynapse (Sound page).\nKept at {}", side(gc - 10)), gc * 5),
             Kind::Sidetone(st) => notify(self.id, &format!("Mic Sidetone: {st}"), &format!("0  {}  15", bar(st, 15)), st * 100 / 15),
         };
     }
@@ -358,7 +405,16 @@ pub fn start(app: AppHandle, headset_dir: Arc<dyn Fn() -> Option<String> + Send 
                 last = None;
                 continue;
             };
-            let gc = num(&dir, "game_chat_balance").filter(|v| (0..=20).contains(v)).unwrap_or(-1);
+            let mut gc = num(&dir, "game_chat_balance").filter(|v| (0..=20).contains(v)).unwrap_or(-1);
+            let mut undone = false;
+            let lock = *GC_LOCK.lock();
+            if let Some(want) = lock {
+                if gc >= 0 && gc != want {
+                    eprintln!("razerctl: game/chat balance moved to {gc} while locked, restoring {want}");
+                    undone = fs::write(Path::new(&dir).join("game_chat_balance"), want.to_string()).is_ok();
+                    if undone { gc = want }
+                }
+            }
             let sidetone_attr = if Path::new(&dir).join("v3pro_sidetone").exists() { "v3pro_sidetone" } else { "sidetone" };
             let st = num(&dir, sidetone_attr).filter(|v| (0..=15).contains(v)).unwrap_or(-1);
             let prev = last.replace((dir.clone(), gc, st));
@@ -366,7 +422,9 @@ pub fn start(app: AppHandle, headset_dir: Arc<dyn Fn() -> Option<String> + Send 
             if pdir != dir || app_focused() {
                 continue;
             }
-            if gc != pgc && gc >= 0 && pgc >= 0 {
+            if undone {
+                sh.show(Kind::GameChatLocked(gc));
+            } else if gc != pgc && gc >= 0 && pgc >= 0 {
                 sh.show(Kind::GameChat(gc));
             } else if st != pst && st >= 0 && pst >= 0 {
                 sh.show(Kind::Sidetone(st));
