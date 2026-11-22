@@ -418,13 +418,17 @@ pub fn start(app: AppHandle, headset_dir: Arc<dyn Fn() -> Option<String> + Send 
             let sidetone_attr = if Path::new(&dir).join("v3pro_sidetone").exists() { "v3pro_sidetone" } else { "sidetone" };
             let st = num(&dir, sidetone_attr).filter(|v| (0..=15).contains(v)).unwrap_or(-1);
             let prev = last.replace((dir.clone(), gc, st));
+            // a wheel turn undone by the lock is always announced (the slider doesn't move, so nothing else shows it;
+            // and on Wayland the window can report focus long after you've moved on)
+            if undone {
+                sh.show(Kind::GameChatLocked(gc));
+                continue;
+            }
             let Some((pdir, pgc, pst)) = prev else { continue };
             if pdir != dir || app_focused() {
                 continue;
             }
-            if undone {
-                sh.show(Kind::GameChatLocked(gc));
-            } else if gc != pgc && gc >= 0 && pgc >= 0 {
+            if gc != pgc && gc >= 0 && pgc >= 0 {
                 sh.show(Kind::GameChat(gc));
             } else if st != pst && st >= 0 && pst >= 0 {
                 sh.show(Kind::Sidetone(st));
