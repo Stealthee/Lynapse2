@@ -110,6 +110,10 @@ Icon=razerctl
 X-GNOME-Autostart-enabled=true
 "
 fi
+# remember where Lynapse was installed from and which version, for update.sh and the in-app update notice
+COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
+mkdir -p "$HOME/.config/razerctl"
+printf '{\n  "src": "%s",\n  "commit": "%s"\n}\n' "$ROOT" "$COMMIT" > "$HOME/.config/razerctl/install.json"
 command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
 # ---------------------------------------------------------------- 5. Spatial Audio (optional)
@@ -145,7 +149,8 @@ say "Starting Lynapse 2.1"
 cat <<EOF
 
 Done. Lynapse 2.1 is in your app menu and system tray$([[ $AUTOSTART == 1 ]] && echo ", and starts at login").
-  Spatial Audio: $([[ $SPATIAL == 1 ]] && echo "installed (switch it on in the headset's SOUND tab)" || echo "not installed (re-run ./install-with-spatial.sh to add it)")
+  Spatial Audio: $([[ $SPATIAL == 1 ]] && echo "installed (switch it on in the headset's SOUND tab)" || { [[ -f "$PWCONF" ]] && echo "kept your existing filter" || echo "not installed (re-run ./install-with-spatial.sh to add it)"; })
   Audio / Mic Enhancement: built in (headset ENHANCEMENT and MIC tabs; the first switch-on restarts PipeWire once)
+  Update later: ./update.sh   (Lynapse also tells you when a new version is out)
   Uninstall: ./uninstall.sh
 EOF

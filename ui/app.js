@@ -397,7 +397,7 @@ async function render() {
   if (view.tab !== 'home' && view.tab !== 'macro' && !dev()) view.tab = 'home';
   const kind = kindOf(view.tab), sub = curSub(), d = dev();
   renderTabs();
-  $('#title').textContent = view.tab === 'home' ? 'LYNAPSE 2.0' : view.tab === 'macro' ? 'MACRO' : d.name;
+  $('#title').textContent = view.tab === 'home' ? 'LYNAPSE 2.1' : view.tab === 'macro' ? 'MACRO' : d.name;
   $('#subtabs').innerHTML = subtabsOf(view.tab).map(s => `<div class="pill ${s === sub ? 'active' : ''} ${d && !d.focused ? '' : SUB_NA[kind]?.includes(s) ? NA : ''}" data-s="${s}">${s}</div>`).join('');
   $('#subtabs').querySelectorAll('[data-s]').forEach(el => el.onclick = () => go(view.tab, el.dataset.s));
   if (d) {
@@ -514,6 +514,27 @@ async function generalPage(d) {
 }
 for (const k of ['mouse', 'headset', 'keyboard', 'accessory']) PAGES[k]['GENERAL'] = generalPage;
 
+// Tiny renderer for the CHANGELOG.md subset we write: ### headings, "- " bullets (indented lines continue them),
+// paragraphs, **bold**, `code`, [text](link) (shown as text: links would navigate the app window).
+function mdLite(md) {
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b style="color:#eee">$1</b>').replace(/`([^`]+)`/g, '<code style="color:#ddd">$1</code>').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  const out = []; let li = null, para = null, list = false;
+  const flush = () => {
+    if (li != null) { out.push(`<li>${inline(li)}</li>`); li = null; }
+    if (para != null) { out.push(`<p>${inline(para)}</p>`); para = null; }
+  };
+  const endList = () => { flush(); if (list) { out.push('</ul>'); list = false; } };
+  for (const line of md.split('\n')) {
+    if (/^#{1,4} /.test(line)) { endList(); out.push(`<h4 style="color:#44d62c;margin:16px 0 6px">${inline(line.replace(/^#+ /, ''))}</h4>`); }
+    else if (/^- /.test(line)) { flush(); if (!list) { out.push('<ul style="margin:0;padding-left:22px">'); list = true; } li = line.slice(2); }
+    else if (/^\s+\S/.test(line) && li != null) li += ' ' + line.trim();
+    else if (!line.trim()) endList();
+    else { if (list) endList(); para = para == null ? line : para + ' ' + line; }
+  }
+  endList();
+  return out.join('');
+}
+
 PAGES.home['DASHBOARD'] = async () => {
   const bt = await invoke('battray_get').catch(() => []);
   const cards = devices.map(d => {
@@ -525,9 +546,33 @@ PAGES.home['DASHBOARD'] = async () => {
     ${d.battery != null ? `<div style="display:flex;gap:10px;align-items:center;font-size:17px">${d.battery}% ${batteryIcon(d.battery, d.charging)}</div>` : ''}</div>`;
   }).join('');
   const ver = await window.__TAURI__.app.getVersion().catch(() => '');
-  return `<div class="banner"><h1>LYNAPSE 2.0</h1><div style="font-size:20px;color:#ddd">Device settings for Linux. Tabs appear as devices connect.</div>${ver ? `<div class="muted" style="font-size:14px;margin-top:8px">Version ${esc(ver)}</div>` : ''}</div>
+  // What's New: the last 5 versions from CHANGELOG.md. The newest opens by itself the first time a new version runs;
+  // open/closed per version is remembered.
+  const wn = await invoke('whats_new').catch(() => null);
+  let wnHtml = '';
+  if (wn && wn.releases && wn.releases.length) {
+    const fresh = mem('whats_new_seen', '') !== wn.version;
+    if (fresh) remember('whats_new_seen', wn.version);
+    const openMap = { ...mem('whats_new_open_v', {}) };
+    if (fresh) openMap[wn.releases[0].version] = true;
+    const items = wn.releases.map((r, i) => {
+      const open = r.version in openMap ? openMap[r.version] : i === 0;
+      const bodyId = 'wn' + (++uid);
+      return `<div style="border-top:${i ? '1px solid #333' : 'none'};padding:${i ? '12px' : '0'} 0 0">
+        <div style="cursor:pointer;font-size:16px;color:#ddd" id="${bind(el => el.onclick = () => {
+          const b = document.getElementById(bodyId); const now = b.style.display === 'none';
+          b.style.display = now ? '' : 'none'; el.firstChild.textContent = now ? '▾ ' : '▸ ';
+          remember('whats_new_open_v', { ...mem('whats_new_open_v', {}), [r.version]: now });
+        })}"><span>${open ? '▾ ' : '▸ '}</span><b>Version ${esc(r.version)}</b>${r.version === wn.version ? ' <span style="color:#44d62c;font-size:13px">(installed)</span>' : ''} <span class="muted" style="font-size:13px">${esc(r.date)}</span></div>
+        <div id="${bodyId}" style="margin:4px 0 12px 18px;${open ? '' : 'display:none'}">${mdLite(r.text)}</div></div>`;
+    }).join('');
+    wnHtml = `<div class="label" style="font-size:17px;margin-bottom:12px">What's New</div>
+      <div class="card" style="margin-bottom:24px;line-height:1.5;font-size:15px;color:#bbb">${items}</div>`;
+  }
+  return `<div class="banner"><h1>LYNAPSE 2.1</h1><div style="font-size:20px;color:#ddd">Device settings for Linux. Tabs appear as devices connect.</div>${ver ? `<div class="muted" style="font-size:14px;margin-top:8px">Version ${esc(ver)}</div>` : ''}</div>
     <div class="label" style="font-size:17px;margin-bottom:16px">▾ Devices</div>
-    <div class="devcards">${cards || '<div class="muted">No supported devices found.</div>'}</div>`;
+    <div class="devcards">${cards || '<div class="muted">No supported devices found.</div>'}</div>
+    <div style="margin-top:28px">${wnHtml}</div>`;
 };
 
 // ---------- macros (stored in remap.json, played by the backend's virtual "razerctl macro" device) ----------
@@ -1432,6 +1477,26 @@ async function openSettings() {
   const auto = await invoke('autostart_get');
   const osdScreen = await invoke('osd_get').catch(() => 'tray');
   let osdPick = osdScreen;
+  const upd = await invoke('update_status').catch(() => null);
+  // status line under "Check for updates": newer version + copy-command button, or "up to date" + Check now
+  const updHtml = u => !u ? '' : u.available
+    ? `<b style="color:#44d62c">Version ${esc(u.available.version)} is available</b> (you have ${esc(u.current)}).
+       <span class="flatbtn" data-upd="copy">Copy update command</span>
+       <div style="margin-top:6px">Paste it into a terminal: <code style="user-select:text;color:#ddd">${esc(u.command)}</code></div>`
+    : `You have the latest version (${esc(u.current)}). <span class="flatbtn" data-upd="check">Check now</span>`;
+  const updBind = el => {
+    el.querySelectorAll('[data-upd]').forEach(b => b.onclick = async () => {
+      if (b.dataset.upd === 'copy') {
+        invoke('update_copy').then(() => toast('Update command copied. Paste it into a terminal and press Enter.'))
+          .catch(cmd => toast('Couldn\'t reach the clipboard. Run this in a terminal: ' + cmd));
+      } else {
+        b.textContent = 'Checking…';
+        const u = await invoke('update_check_now').catch(e => (toast(e), null));
+        if (u) { el.innerHTML = updHtml(u); updBind(el); if (!u.available) toast('Lynapse is up to date.'); }
+        else b.textContent = 'Check now';
+      }
+    });
+  };
   const screens = await invoke('osd_screens').catch(() => []);
   const where = g => { const m = /(-?\d+),(-?\d+)/.exec(g || ''); return m ? `at ${m[1]},${m[2]}` : ''; };
   const osdOpts = [['tray', 'Near the tray (KDE notification)'], ...screens.map(s => [s.name, `Screen ${s.id}: ${s.name} ${where(s.geometry)}`]), ['off', 'Off']];
@@ -1440,7 +1505,8 @@ async function openSettings() {
     <div class="row">Start Lynapse 2.1 at login (minimised to tray) ${toggle(auto, on => invoke('autostart_set', { on }).catch(toast))}</div>
     <div class="row">Scroll-wheel pop-up <select id="${bind(el => el.onchange = () => { osdPick = el.value; invoke('osd_preview', { screen: el.value }).catch(toast); })}">${osdOpts.map(([v, t]) => `<option value="${esc(v)}" ${v === osdScreen ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
     <p class="muted" style="font-size:13px;margin-top:-6px">Currently: <b style="color:#ddd">${esc((osdOpts.find(o => o[0] === osdScreen) || ['', osdScreen])[1])}</b>. Picking another shows a sample there; Save &amp; Close keeps it.</p>
-    <div class="row ${NA}">Check for updates ${toggle(false)}</div>
+    <div class="row">Check for updates ${toggle(upd ? upd.check : true, on => invoke('update_set_check', { on }).catch(toast))}</div>
+    <div id="${bind(el => updBind(el))}" class="muted" style="font-size:13px;margin-top:-6px">${updHtml(upd)}</div>
     <div class="row ${NA}">Theme ${seg([{ v: 'd', label: 'Dark' }, { v: 'l', label: 'Light' }], 'd')}</div>
     <p class="muted" style="font-size:13px">Closing the window keeps Lynapse 2.1 in the tray. Use the tray menu → Quit to exit.</p>
     <div style="text-align:right;display:flex;gap:12px;justify-content:flex-end">

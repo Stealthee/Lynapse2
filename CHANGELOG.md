@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### New
+- **Game/Chat balance lock.** A **Lock balance** switch under the Game/Chat Balance slider (Sound page). While it is
+  on, turning the headset wheel no longer changes the balance: Lynapse puts it back right away and shows a pop-up
+  saying the balance is locked. The slider and the tray menu still change it.
+- **Update notice.** Lynapse tells you when a new version is released: a notification with **Copy update command**,
+  **What's new** and **Ignore this version** buttons, plus an entry in the tray menu. Ignoring is remembered for that
+  version only. Switch it off under Settings → Check for updates. It only asks GitHub for the latest release number.
+- **`./update.sh`** gets the latest version, rebuilds, reinstalls and restarts Lynapse, keeping your settings,
+  autostart choice and Spatial Audio filter.
+- **What's New** on the start page shows the changes of the last 5 versions.
+
+### Fixed
+- Two places on the start page still said "Lynapse 2.0".
+
 ## 2.1.0 (2026-11-21)
 
 ### New

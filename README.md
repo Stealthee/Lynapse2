@@ -112,7 +112,16 @@ Made on KDE Plasma (Wayland). The tray and window work elsewhere; the per-game f
    Spatial Audio also sets up the PipeWire filter. Connect the headset first so the filter is pointed at it.
    Options: `--no-deps`, `--no-autostart`, `--hrir FILE`. `./install.sh --help` lists them.
 
-**Update:** `git pull` and run the same install script again.
+**Update:** Lynapse tells you when a new version is out (a notification, plus an entry in the tray menu; switch it off
+under Settings → Check for updates). To update, run this in your Lynapse2 folder:
+```sh
+./update.sh
+```
+It gets the latest version, rebuilds and reinstalls the app, and restarts it. Your settings, your autostart choice and your
+Spatial Audio filter (including one built with `dsp/synapse/build.py`) are kept. The notification's **Copy update
+command** button puts the exact command on your clipboard. Updating from 2.1 or older (no `update.sh` yet):
+`cd Lynapse2 && git pull && ./update.sh`. The update check only asks GitHub for the latest release number; nothing
+about you or your devices is sent.
 **Uninstall:** `./uninstall.sh` (add `--purge` to also delete your settings).
 
 ## Troubleshooting

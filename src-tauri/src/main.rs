@@ -9,6 +9,7 @@ mod smartpoll;
 mod battray;
 mod quick;
 mod osd;
+mod update;
 mod gameprof;
 mod enhance;
 use parking_lot::Mutex;
@@ -854,6 +855,9 @@ fn build_menu(app: &AppHandle, devs: &[Device]) -> tauri::Result<Menu<tauri::Wry
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    if let Some(r) = update::available() {
+        menu.append(&MenuItem::with_id(app, "update", format!("⬆ Update available: v{} (copy update command)", r.version), true, None::<&str>)?)?;
+    }
     menu.append(&MenuItem::with_id(app, "show", "Open Lynapse 2.1", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?)?;
     Ok(menu)
@@ -881,7 +885,7 @@ fn main() {
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
             devices, read_attr, read_attr_bytes, write_attr, write_attr_bytes,
-            audio_get, audio_set, open_settings, state_load, state_save, start_page, thx_engines, thx_ok, thx_route, demo_play, demo_move, demo_stop, demo_ext_info, demo_ext_play, demo_ext_mode, game_sink, lynapse_config, remap_get, remap_set, macro_play, macro_stop, calib_start, calib_read, calib_stop, smartpoll_get, smartpoll_set, battray_get, battray_set, autostart_get, autostart_set, osd::osd_screens, osd::osd_get, osd::osd_set, osd::osd_preview, osd::gc_lock_get, osd::gc_lock_set, gameprof::gp_list, gameprof::gp_save, enhance::enh_get, enhance::enh_set
+            audio_get, audio_set, open_settings, state_load, state_save, start_page, thx_engines, thx_ok, thx_route, demo_play, demo_move, demo_stop, demo_ext_info, demo_ext_play, demo_ext_mode, game_sink, lynapse_config, remap_get, remap_set, macro_play, macro_stop, calib_start, calib_read, calib_stop, smartpoll_get, smartpoll_set, battray_get, battray_set, autostart_get, autostart_set, osd::osd_screens, osd::osd_get, osd::osd_set, osd::osd_preview, osd::gc_lock_get, osd::gc_lock_set, update::update_status, update::update_set_check, update::update_check_now, update::update_copy, update::update_ignore, update::whats_new, gameprof::gp_list, gameprof::gp_save, enhance::enh_get, enhance::enh_set
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -896,6 +900,8 @@ fn main() {
                     let id = ev.id().as_ref().to_string();
                     if id == "quit" {
                         app.exit(0);
+                    } else if id == "update" {
+                        update::copy_and_tell();
                     } else if id == "show" {
                         show_main(app);
                     } else if let Some(dev) = id.strip_prefix("dev:") {
@@ -941,6 +947,18 @@ fn main() {
                 enhance::restore(move || {
                     st.devices.lock().iter().find(|d| d.kind == "headset" && d.focused && d.ifaces.iter().any(|i| BLACKSHARK_V3_PRO_PIDS.contains(&i.pid.as_str()))).map(|d| d.name.trim_start_matches("Razer ").replace(' ', "_"))
                 });
+            }
+
+            // Update notice: rebuild the tray menu when an update appears or gets ignored.
+            {
+                let st = state.clone();
+                let h = handle.clone();
+                update::start(Arc::new(move || {
+                    let devs = st.devices.lock().clone();
+                    if let (Some(t), Ok(m)) = (st.tray.lock().as_ref(), build_menu(&h, &devs)) {
+                        let _ = t.set_menu(Some(m));
+                    }
+                }));
             }
 
             // Scroll-wheel pop-ups near the tray.
