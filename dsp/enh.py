@@ -1,4 +1,6 @@
-"""Reference model for razerctl's Synapse/THX-style enhancement chains (playback "Audio Enhancement" + "Mic Enhancement").
+"""NOTE (2026-11-21): the app (src-tauri/src/enhance.rs) now uses Synapse's own settings for Sound/Volume Normalization,
+mic Vocal Clarity, Noise Cancellation and Voice Gate; the fits below for those modes are kept for reference only.
+Reference model for razerctl's Synapse/THX-style enhancement chains (playback "Audio Enhancement" + "Mic Enhancement").
 
 One fixed filter-chain graph per side; every Synapse mode/slider value maps to a set of live control values on it
 (pw-cli set-param <node> Props '{ params = [ "node:Port" value ... ] }'), so changing mode/level never restarts PipeWire.

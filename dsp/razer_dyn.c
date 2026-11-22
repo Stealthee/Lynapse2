@@ -9,6 +9,9 @@
  *   g_exp  = max(floor, (ratio_e - 1) * (L - T_e))      for L < T_e  (soft knee of width K around T_e)
  *   g_comp = (1/ratio_c - 1) * (L - T_c)                for L > T_c  (soft knee of width K around T_c)
  *   muted                                               for L < T_mute
+ * Gate (separate, off at -200): Synapse's Voice Gate. Every sample whose |x| is above the threshold pulls a linear gain
+ * towards 1 (one-pole, time constant = Attack), every sample below pulls it towards 0 (time constant = Release). Above
+ * the threshold it also dips on each zero crossing, so it acts as a soft expander there (Synapse: open 100 ms, close 10 ms).
  * Gain smoothing is one-pole in dB (time constants; a 90 % settle takes 2.3x): the expander/mute gain OPENS with Attack
  * and closes with Release; the compressor gain REDUCES with Attack and recovers with Release. Mute = DEPTH (-100 dB),
  * output exactly 0 while fully closed.
@@ -25,7 +28,7 @@
 enum {
     P_IN, P_OUT,
     P_GAIN, P_EXP_T, P_EXP_R, P_EXP_FLOOR, P_MUTE_T, P_COMP_T, P_COMP_R, P_KNEE,
-    P_ATTACK, P_RELEASE, P_DETECT, P_RMS_MS,
+    P_ATTACK, P_RELEASE, P_DETECT, P_RMS_MS, P_GATE_T,
     P_COUNT
 };
 
@@ -35,6 +38,7 @@ typedef struct {
     double env;    /* mean square (RMS mode) or peak envelope, linear */
     double ge;     /* smoothed expander/mute gain in dB (0 = open, >= DEPTH) */
     double gc;     /* smoothed compressor gain in dB (<= 0) */
+    double gg;     /* gate gain, linear 0..1 */
 } Dyn;
 
 static LADSPA_Handle instantiate(const LADSPA_Descriptor *d, unsigned long sr)
@@ -53,6 +57,7 @@ static void activate(LADSPA_Handle h)
     s->env = 0.0;
     s->ge = 0.0;
     s->gc = 0.0;
+    s->gg = 1.0;
 }
 
 /* soft-knee "below threshold" excess: how far L is under T, smoothed over knee width K (returns <= 0) */
@@ -88,8 +93,9 @@ static void run(LADSPA_Handle h, unsigned long n)
     const double ca = coef(*s->p[P_ATTACK], s->sr), cr = coef(*s->p[P_RELEASE], s->sr);
     const int peak = *s->p[P_DETECT] >= 0.5f;
     const double cd = coef(*s->p[P_RMS_MS] > 0.1 ? *s->p[P_RMS_MS] : 0.1, s->sr);
-    const int exp_on = re > 1.0001, comp_on = rc > 1.0001, mute_on = tm > -199.0;
-    double env = s->env, ge = s->ge, gc = s->gc;
+    const int exp_on = re > 1.0001, comp_on = rc > 1.0001, mute_on = tm > -199.0, gate_on = *s->p[P_GATE_T] > -199.0f;
+    const double gthr = pow(10.0, *s->p[P_GATE_T] / 20.0);
+    double env = s->env, ge = s->ge, gc = s->gc, gg = gate_on ? s->gg : 1.0;
 
     for (unsigned long i = 0; i < n; i++) {
         double x = in[i] * gain, te_db = 0.0, tc_db = 0.0;
@@ -113,11 +119,16 @@ static void run(LADSPA_Handle h, unsigned long n)
         }
         ge = te_db > ge ? te_db + ca * (ge - te_db) : te_db + cr * (ge - te_db);       /* open = attack */
         gc = tc_db < gc ? tc_db + ca * (gc - tc_db) : tc_db + cr * (gc - tc_db);         /* reduce = attack */
-        out[i] = (LADSPA_Data)(ge <= DEPTH + 0.01 ? 0.0 : x * pow(10.0, (ge + gc) / 20.0));
+        if (gate_on) {
+            double tgt = fabs(x) > gthr ? 1.0 : 0.0, c = gg <= tgt ? ca : cr;
+            gg = (1.0 - c) * tgt + c * gg;
+        }
+        out[i] = (LADSPA_Data)(ge <= DEPTH + 0.01 ? 0.0 : x * gg * pow(10.0, (ge + gc) / 20.0));
     }
     s->env = env < 1e-30 ? 0.0 : env;
     s->ge = ge;
     s->gc = gc;
+    s->gg = gg;
 }
 
 static void cleanup(LADSPA_Handle h) { free(h); }
@@ -126,11 +137,11 @@ static const char *names[P_COUNT] = {
     "Input", "Output",
     "Input gain (dB)", "Expander threshold (dB)", "Expander ratio", "Expander floor (dB)", "Mute threshold (dB)",
     "Compressor threshold (dB)", "Compressor ratio", "Knee (dB)",
-    "Attack (ms)", "Release (ms)", "Peak detect", "Detector window (ms)",
+    "Attack (ms)", "Release (ms)", "Peak detect", "Detector window (ms)", "Gate threshold (dB)",
 };
 static const LADSPA_PortDescriptor pd[P_COUNT] = {
     LADSPA_PORT_INPUT | LADSPA_PORT_AUDIO, LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO,
-    [P_GAIN ... P_RMS_MS] = LADSPA_PORT_INPUT | LADSPA_PORT_CONTROL,
+    [P_GAIN ... P_GATE_T] = LADSPA_PORT_INPUT | LADSPA_PORT_CONTROL,
 };
 #define HB(lo, hi, def) { LADSPA_HINT_BOUNDED_BELOW | LADSPA_HINT_BOUNDED_ABOVE | (def), (lo), (hi) }
 static const LADSPA_PortRangeHint hints[P_COUNT] = {
@@ -147,6 +158,7 @@ static const LADSPA_PortRangeHint hints[P_COUNT] = {
     HB(0, 5000, LADSPA_HINT_DEFAULT_MIDDLE),      /* release */
     HB(0, 1, LADSPA_HINT_DEFAULT_0 | LADSPA_HINT_INTEGER),
     HB(0.1, 100, LADSPA_HINT_DEFAULT_LOW),        /* detector window */
+    HB(-200, 0, LADSPA_HINT_DEFAULT_MINIMUM),     /* gate threshold (-200 = off) */
 };
 
 static const LADSPA_Descriptor desc = {
