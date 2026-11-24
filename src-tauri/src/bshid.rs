@@ -240,7 +240,8 @@ fn absorb(c: &mut Cache, d: &[u8]) -> Option<Event> {
                 c.battery_pct = -1;
                 ev = Some(Event::LinkUp);
             }
-            0x02 if d[11] == 0x01 && (3..=4).contains(&d[12]) && v != 0xff && (d[13] | d[14] | d[15]) != 0 => {
+            // cnt=4 from the handshake's dir=0x00 GET, cnt=8 (version twice) from the prime's dir=0x80 GET
+            0x02 if d[11] == 0x01 && (3..=8).contains(&d[12]) && v != 0xff && (d[13] | d[14] | d[15]) != 0 => {
                 c.fw = Some([d[13], d[14], d[15]]);
             }
             0x00 if d[11] == 0x01 && v != 0xff && (d[12] as usize) < 32 => {
@@ -250,12 +251,16 @@ fn absorb(c: &mut Cache, d: &[u8]) -> Option<Event> {
                 }
             }
             0x19 if v <= 15 => c.sidetone = v as i64,
-            0x5c | 0x65 if v != 0xff => c.game_chat = v as i64,
+            0x5c if v != 0xff => c.game_chat = v as i64,
             0x5d if v != 0xff => c.in_call_mix = v as i64,
             0x5f if v <= 1 => c.ull = v as i64,
-            0x66 if v <= 1 => c.prompts = v as i64,
+            // GET 0x65 answers cnt=2 [0x00, on], mirroring the 0xe5 SET args (0x66 always says 0;
+            // verified on hardware 2026-11-24)
+            0x65 if d[12] >= 2 && d[14] <= 1 => c.prompts = d[14] as i64,
             0x6a if v <= 3 => c.fn_button = v as i64,
-            0x9e if v <= 1 => c.thx = v as i64,
+            // THX reads back on 0x1e (SET 0x9e minus 0x80, like every other setting); 0x9e itself
+            // always answers 0, including the reply to a SET (verified on hardware 2026-11-24)
+            0x1e if v <= 1 => c.thx = v as i64,
             0x16 if (0x20..=0x23).contains(&v) => c.mic_eq_preset = (v - 0x20) as i64,
             0x55 if v <= 1 => c.mic_muted = v as i64,
             0x12 => {
@@ -360,12 +365,15 @@ impl Dev {
 
     /// razer_blackshark_v3_prime_caches: one GET per class the headset never pushes unprompted.
     fn prime(&self) {
-        const GETTERS: [u8; 13] = [0x02, 0x19, 0x2c, 0x5f, 0x9e, 0x12, 0x16, 0x55, 0x5c, 0x65, 0x5d, 0x66, 0x6a];
+        const GETTERS: [u8; 12] = [0x02, 0x19, 0x2c, 0x5f, 0x1e, 0x12, 0x16, 0x55, 0x5c, 0x65, 0x5d, 0x6a];
         for g in GETTERS {
             if !self.alive.load(Ordering::SeqCst) {
                 return;
             }
-            let _ = self.send(&pro(g, 0x00, &[]));
+            // 0x65 is multiplexed: its first arg selects the sub-setting (0x00 = audio prompts). Without
+            // it the firmware reuses whatever byte the previous frame left there and answers 0xff.
+            let args: &[u8] = if g == 0x65 { &[0x00] } else { &[] };
+            let _ = self.send(&pro(g, 0x00, args));
             thread::sleep(Duration::from_millis(120));
         }
     }
@@ -977,5 +985,33 @@ mod tests {
         d[10] = 0x20;
         d[13] = 1;
         assert!(matches!(absorb(&mut c, &d), Some(Event::LinkUp)));
+    }
+
+    /// Real replies captured from the headset over hidraw on 2026-11-24.
+    #[test]
+    fn readback_classes_from_hardware() {
+        fn frame(tail: &[u8]) -> [u8; LEN] {
+            let mut d = [0u8; LEN];
+            d[..3].copy_from_slice(&[0x02, 0x02, 0x60]);
+            d[9] = 0x80;
+            d[10..10 + tail.len()].copy_from_slice(tail);
+            d
+        }
+        let mut c = Cache::default();
+        absorb(&mut c, &frame(&[0x5c, 0x01, 0x01, 0x0a])); // game/chat 10
+        absorb(&mut c, &frame(&[0x65, 0x01, 0x02, 0x00, 0x01])); // prompts on
+        absorb(&mut c, &frame(&[0x1e, 0x01, 0x01, 0x01])); // THX on
+        assert_eq!((c.game_chat, c.prompts, c.thx), (10, 1, 1));
+        // the SET echoes and the old 0x66 getter always say 0: they must not clobber the cache
+        absorb(&mut c, &frame(&[0x9e, 0x01, 0x01, 0x00]));
+        absorb(&mut c, &frame(&[0x66, 0x01, 0x01, 0x00]));
+        absorb(&mut c, &frame(&[0xe5, 0x01, 0x01, 0x00]));
+        assert_eq!((c.game_chat, c.prompts, c.thx), (10, 1, 1));
+        absorb(&mut c, &frame(&[0x65, 0x01, 0x02, 0x00, 0x00]));
+        absorb(&mut c, &frame(&[0x1e, 0x01, 0x01, 0x00]));
+        assert_eq!((c.prompts, c.thx), (0, 0));
+        // firmware: the dir=0x80 GET 0x02 answers cnt=8 (captured 2026-11-24)
+        absorb(&mut c, &frame(&[0x02, 0x01, 0x08, 0x01, 0x03, 0x03, 0x00, 0x01, 0x03, 0x03, 0x00]));
+        assert_eq!(c.fw, Some([1, 3, 3]));
     }
 }

@@ -7,6 +7,8 @@
 #                 --gain G --shelf DB (filter level / treble shelf for that HRIR; dsp/synapse/build.py prints them)
 #
 # Installs:  ~/.local/bin/razerctl, menu entry + icon, autostart entry (starts minimised to the tray),
+#            /etc/udev/rules.d/70-blackshark-v3pro-hidraw.rules (sudo; lets Lynapse drive a BlackShark V3 Pro
+#            directly when the OpenRazer driver can't load, e.g. on the CachyOS EAC kernel),
 #            and with --spatial: ~/.local/share/razerctl/thx/<hrir>.wav + ~/.config/pipewire/pipewire.conf.d/60-razerctl-thx.conf
 # Undo with ./uninstall.sh
 set -euo pipefail
@@ -115,6 +117,17 @@ COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
 mkdir -p "$HOME/.config/razerctl"
 printf '{\n  "src": "%s",\n  "commit": "%s"\n}\n' "$ROOT" "$COMMIT" > "$HOME/.config/razerctl/install.json"
 command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+
+# BlackShark V3 Pro without the OpenRazer driver (e.g. a kernel that only loads signed modules): Lynapse talks to
+# the headset over /dev/hidraw, which needs this rule for your user. Only asks for sudo when it is missing or changed.
+RULE=packaging/70-blackshark-v3pro-hidraw.rules
+if ! cmp -s "$RULE" "/etc/udev/rules.d/$(basename "$RULE")"; then
+    say "Installing the BlackShark V3 Pro udev rule (asks for your password)"
+    if sudo install -m644 "$RULE" /etc/udev/rules.d/ && sudo udevadm control --reload &&
+        sudo udevadm trigger --subsystem-match=hidraw; then :; else
+        warn "Couldn't install $RULE; without OpenRazer the BlackShark V3 Pro won't be controllable."
+    fi
+fi
 
 # ---------------------------------------------------------------- 5. Spatial Audio (optional)
 PWCONF="$HOME/.config/pipewire/pipewire.conf.d/60-razerctl-thx.conf"

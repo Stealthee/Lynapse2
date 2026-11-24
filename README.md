@@ -99,6 +99,9 @@ Made on KDE Plasma (Wayland). The tray and window work elsewhere; the per-game f
    - most Razer devices: install openrazer for your distro (for example `openrazer-driver-dkms` on Arch)
    - **BlackShark V3 Pro**: it needs the patched driver from
      [Stealthee/openrazer-v3pro-custom-driver](https://github.com/Stealthee/openrazer-v3pro-custom-driver)
+     (recommended). Without it, for example on a kernel that only loads signed modules such as CachyOS's EAC kernel,
+     Lynapse controls the headset directly through `/dev/hidraw` with the same settings; the installer adds the udev
+     rule this needs.
 2. **Lynapse:**
    ```sh
    git clone https://github.com/Stealthee/Lynapse2.git
@@ -126,7 +129,7 @@ about you or your devices is sent.
 
 ## Troubleshooting
 
-- **No device tab:** check the driver is loaded: `ls /sys/bus/hid/drivers/ | grep razer`.
+- **No device tab:** check the driver is loaded: `ls /sys/bus/hid/drivers/ | grep razer`. For a BlackShark V3 Pro without the driver, `razerctl --hid` shows whether Lynapse can reach it directly.
 - **Spatial Audio is greyed out:** the filter isn't loaded. Re-run `./install-with-spatial.sh` and check
   `journalctl --user -u pipewire -b | tail`.
 - **Enhancement doesn't switch on:** `journalctl --user -u pipewire -b | tail` usually shows why.

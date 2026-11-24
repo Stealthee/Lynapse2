@@ -18,4 +18,9 @@ if [[ "${1:-}" == "--purge" ]]; then
     echo "Settings removed."
 fi
 [[ $pw == 1 ]] && systemctl --user restart pipewire pipewire-pulse wireplumber || true
+R=/etc/udev/rules.d/70-blackshark-v3pro-hidraw.rules
+if [[ -f $R ]]; then
+    echo "Removing $R (asks for your password)"
+    sudo rm -f "$R" && sudo udevadm control --reload || echo "Couldn't remove $R; delete it by hand if you want."
+fi
 echo "Lynapse 2.1 removed."
