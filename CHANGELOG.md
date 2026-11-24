@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.1.1 (2026-11-24)
 
 ### New
+- **BlackShark V3 Pro works without the OpenRazer driver.** On kernels that only load signed modules (for example
+  CachyOS's EAC kernel for anti-cheat games), the OpenRazer driver can't load. Lynapse now talks to the headset
+  directly instead, and every setting works the same: EQ presets and custom curves, mic EQ, sidetone, ANC/ambient,
+  Ultra Low Latency, Spatial Audio, Game/Chat, in-call mix, audio prompts, FN button, battery and charging. The
+  installer adds a small udev rule for this (it asks for your password once). With the driver loaded, nothing changes.
+  Command line: `razerctl --hid` lists every setting, `razerctl --hid <setting> <value>` changes one.
 - **Game/Chat balance lock.** A **Lock balance** switch under the Game/Chat Balance slider (Sound page). While it is
   on, turning the headset wheel no longer changes the balance: Lynapse puts it back right away and shows a pop-up
   saying the balance is locked. The slider and the tray menu still change it.
@@ -15,6 +21,11 @@
 
 ### Fixed
 - Two places on the start page still said "Lynapse 2.0".
+- BlackShark V3 Pro, OpenRazer driver: **Spatial Audio** and **audio prompts** showed as off after every connect,
+  **Game/Chat** could show the wrong balance, and the **firmware version** often showed v1.0. These are driver bugs;
+  the fixes are in the driver branch `v3pro-readback-getters` at
+  [Stealthee/openrazer-v3pro-custom-driver](https://github.com/Stealthee/openrazer-v3pro-custom-driver) and show up
+  in Lynapse once you update the driver. The new driver-free mode above reads all four correctly.
 
 ## 2.1.0 (2026-11-21)
 
