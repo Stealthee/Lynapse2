@@ -240,7 +240,7 @@ fn apply_window_for(screen: String) {
 }
 
 fn num(dir: &str, attr: &str) -> Option<i64> {
-    fs::read_to_string(Path::new(dir).join(attr)).ok().and_then(|s| s.trim().split_whitespace().next()?.parse().ok())
+    crate::bshid::read(Path::new(dir).join(attr)).ok().and_then(|s| s.trim().split_whitespace().next()?.parse().ok())
 }
 
 fn bar(pos: i64, max: i64) -> String {
@@ -411,11 +411,11 @@ pub fn start(app: AppHandle, headset_dir: Arc<dyn Fn() -> Option<String> + Send 
             if let Some(want) = lock {
                 if gc >= 0 && gc != want {
                     eprintln!("razerctl: game/chat balance moved to {gc} while locked, restoring {want}");
-                    undone = fs::write(Path::new(&dir).join("game_chat_balance"), want.to_string()).is_ok();
+                    undone = crate::bshid::write(Path::new(&dir).join("game_chat_balance"), want.to_string()).is_ok();
                     if undone { gc = want }
                 }
             }
-            let sidetone_attr = if Path::new(&dir).join("v3pro_sidetone").exists() { "v3pro_sidetone" } else { "sidetone" };
+            let sidetone_attr = if crate::bshid::exists(Path::new(&dir).join("v3pro_sidetone")) { "v3pro_sidetone" } else { "sidetone" };
             let st = num(&dir, sidetone_attr).filter(|v| (0..=15).contains(v)).unwrap_or(-1);
             let prev = last.replace((dir.clone(), gc, st));
             // a wheel turn undone by the lock is always announced (the slider doesn't move, so nothing else shows it;

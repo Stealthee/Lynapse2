@@ -118,19 +118,19 @@ fn ignored(w: &Win) -> bool {
 
 // ---------- headset reads/writes ----------
 fn rd(dir: &str, a: &str) -> Option<u32> {
-    fs::read_to_string(Path::new(dir).join(a)).ok().and_then(|s| s.split_whitespace().next().and_then(|t| t.parse().ok()))
+    crate::bshid::read(Path::new(dir).join(a)).ok().and_then(|s| s.split_whitespace().next().and_then(|t| t.parse().ok()))
 }
 fn apply(thx: Option<bool>, eq: Option<u32>) {
     let Some((dir, needle)) = HEADSET.get().and_then(|f| f()) else { return };
     if let Some(e) = eq {
         if rd(&dir, "v3pro_headphone_eq") != Some(e) {
-            let _ = fs::write(Path::new(&dir).join("v3pro_headphone_eq"), e.to_string());
+            let _ = crate::bshid::write(Path::new(&dir).join("v3pro_headphone_eq"), e.to_string());
         }
     }
     if let Some(on) = thx {
         // without the PipeWire THX filter there is nothing to route to, so leave it alone
         if crate::thx_available() && rd(&dir, "v3pro_thx_spatial_audio").map(|v| v == 1) != Some(on) {
-            let _ = fs::write(Path::new(&dir).join("v3pro_thx_spatial_audio"), if on { "1" } else { "0" });
+            let _ = crate::bshid::write(Path::new(&dir).join("v3pro_thx_spatial_audio"), if on { "1" } else { "0" });
             let _ = crate::thx_route_sync(on, &needle);
         }
     }

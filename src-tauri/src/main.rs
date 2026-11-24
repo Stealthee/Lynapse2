@@ -12,12 +12,12 @@ mod osd;
 mod update;
 mod gameprof;
 mod enhance;
+mod bshid;
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
     fs,
-    io::Write,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -158,7 +158,7 @@ fn remap_set(state: tauri::State<'_, Arc<AppState>>, config: remap::Config) -> R
 }
 
 fn read_trim(p: &Path) -> Option<String> {
-    fs::read_to_string(p).ok().map(|s| s.trim().to_string())
+    bshid::read(p).ok().map(|s| s.trim().to_string())
 }
 
 fn split_conn(name: &str) -> (String, String) {
@@ -213,9 +213,9 @@ fn probe_async(path: &Path) {
     }
     let path = path.to_path_buf();
     std::thread::spawn(move || {
-        let probe = if path.join("charge_level").exists() { "charge_level" } else { "firmware_version" };
+        let probe = if bshid::exists(path.join("charge_level")) { "charge_level" } else { "firmware_version" };
         let t0 = std::time::Instant::now();
-        let first = fs::read_to_string(path.join(probe));
+        let first = bshid::read(path.join(probe));
         // a read that only succeeded after a long stall counts as dead too (half-present device)
         let alive = first.is_ok() && t0.elapsed() < Duration::from_secs(2);
         let mut r = Probe { alive, ..Default::default() };
@@ -227,7 +227,7 @@ fn probe_async(path: &Path) {
             r.firmware = read_trim(&path.join("firmware_version")).unwrap_or_default();
             // razerkraken has no firmware query for the BlackShark V3 family and just reports a
             // fixed "v1.0" placeholder, so don't show it.
-            if r.firmware == "v1.0" && path.to_string_lossy().contains("razerkraken") {
+            if r.firmware == "v1.0" && (path.to_string_lossy().contains("razerkraken") || path.starts_with(bshid::VROOT)) {
                 r.firmware.clear();
             }
             r.serial = read_trim(&path.join("device_serial"))
@@ -285,6 +285,31 @@ fn scan() -> Vec<Device> {
             dev.ifaces.push(Iface { path: p.to_string_lossy().to_string(), pid, conn, alive });
         }
     }
+    // BlackShark V3 Pro with no razerkraken bound (e.g. the EAC kernel): the hidraw backend stands in
+    // for the driver under a virtual sysfs-style dir, so everything below treats it the same.
+    for hd in bshid::refresh() {
+        let p = PathBuf::from(hd.path());
+        probe_async(&p);
+        let alive = PROBES.lock().get(&hd.path()).map(|x| x.alive).unwrap_or(false);
+        let id = "headset:Razer BlackShark V3 Pro".to_string();
+        let dev = map.entry(id.clone()).or_insert_with(|| Device {
+            id,
+            name: "Razer BlackShark V3 Pro".into(),
+            kind: "headset".into(),
+            ifaces: vec![],
+            active: None,
+            conn: String::new(),
+            attrs: vec![],
+            battery: None,
+            charging: false,
+            firmware: String::new(),
+            serial: String::new(),
+            focused: false,
+            driver: true,
+        });
+        dev.focused |= std::env::var_os("RAZERCTL_GENERIC").is_none();
+        dev.ifaces.push(Iface { path: hd.path(), pid: hd.pid().to_string(), conn: hd.conn().to_string(), alive });
+    }
     let mut out = vec![];
     for (_, mut d) in map {
         d.ifaces.sort_by(|a, b| a.path.cmp(&b.path));
@@ -299,7 +324,9 @@ fn scan() -> Vec<Device> {
             let p = PathBuf::from(&i.path);
             d.active = Some(i.path.clone());
             d.conn = i.conn.clone();
-            if let Ok(rd) = fs::read_dir(&p) {
+            if let Some(a) = bshid::list(&p) {
+                d.attrs = a;
+            } else if let Ok(rd) = fs::read_dir(&p) {
                 let mut a: Vec<String> = rd
                     .flatten()
                     .filter(|e| e.path().is_file())
@@ -402,32 +429,26 @@ fn devices(state: tauri::State<'_, Arc<AppState>>) -> Vec<Device> {
 #[tauri::command]
 async fn read_attr(state: tauri::State<'_, Arc<AppState>>, path: String, attr: String) -> Result<String, String> {
     let p = valid_target(&state, &path, &attr)?;
-    blocking(move || fs::read_to_string(&p).map(|s| s.trim().to_string()).map_err(|e| format!("{attr}: {e}"))).await
+    blocking(move || bshid::read(&p).map(|s| s.trim().to_string()).map_err(|e| format!("{attr}: {e}"))).await
 }
 
 #[tauri::command]
 async fn read_attr_bytes(state: tauri::State<'_, Arc<AppState>>, path: String, attr: String) -> Result<Vec<u8>, String> {
     let p = valid_target(&state, &path, &attr)?;
-    blocking(move || fs::read(&p).map_err(|e| format!("{attr}: {e}"))).await
+    blocking(move || bshid::read_bytes(&p).map_err(|e| format!("{attr}: {e}"))).await
 }
 
 #[tauri::command]
 async fn write_attr(state: tauri::State<'_, Arc<AppState>>, path: String, attr: String, value: String) -> Result<(), String> {
     let p = valid_target(&state, &path, &attr)?;
-    blocking(move || {
-        let mut f = fs::OpenOptions::new().write(true).open(&p).map_err(|e| format!("{attr}: {e}"))?;
-        f.write_all(value.as_bytes()).map_err(|e| format!("{attr}: {e}"))
-    })
+    blocking(move || bshid::write(&p, value.as_bytes()).map_err(|e| format!("{attr}: {e}")))
     .await
 }
 
 #[tauri::command]
 async fn write_attr_bytes(state: tauri::State<'_, Arc<AppState>>, path: String, attr: String, value: Vec<u8>) -> Result<(), String> {
     let p = valid_target(&state, &path, &attr)?;
-    blocking(move || {
-        let mut f = fs::OpenOptions::new().write(true).open(&p).map_err(|e| format!("{attr}: {e}"))?;
-        f.write_all(&value).map_err(|e| format!("{attr}: {e}"))
-    })
+    blocking(move || bshid::write(&p, &value).map_err(|e| format!("{attr}: {e}")))
     .await
 }
 
@@ -721,11 +742,11 @@ fn reapply_write_only(devs: &[Device], seen: &mut std::collections::HashMap<Stri
         for attr in WRITE_ONLY {
             let Some(v) = st.get(&d.id).and_then(|x| x.get(*attr)).and_then(|v| v.as_str().map(String::from)) else { continue };
             let f = PathBuf::from(&path).join(attr);
-            if f.exists() {
+            if bshid::exists(&f) {
                 std::thread::spawn(move || {
                     // give the link a moment after connect
                     std::thread::sleep(Duration::from_millis(1500));
-                    let _ = fs::write(&f, v);
+                    let _ = bshid::write(&f, v);
                 });
             }
         }
@@ -744,10 +765,10 @@ fn enforce_saved(devs: &[Device]) {
         for attr in ENFORCED {
             let Some(want) = st.get(&d.id).and_then(|x| x.get(*attr)).and_then(|v| v.as_str().map(String::from)) else { continue };
             let f = PathBuf::from(&path).join(attr);
-            let Ok(cur) = fs::read_to_string(&f) else { continue };
+            let Ok(cur) = bshid::read(&f) else { continue };
             if cur.trim() != want.trim() {
                 eprintln!("razerctl: {} {} was {}, restoring saved {}", d.id, attr, cur.trim(), want.trim());
-                let _ = fs::write(&f, &want);
+                let _ = bshid::write(&f, &want);
             }
         }
     }
@@ -864,6 +885,11 @@ fn build_menu(app: &AppHandle, devs: &[Device]) -> tauri::Result<Menu<tauri::Wry
 }
 
 fn main() {
+    // `razerctl --hid [attr [value]]`: BlackShark V3 Pro over hidraw, no GUI (see bshid.rs)
+    let argv: Vec<String> = std::env::args().collect();
+    if argv.get(1).map(String::as_str) == Some("--hid") {
+        std::process::exit(bshid::cli(&argv[2..]));
+    }
     if let Ok(p) = std::env::var("RAZERCTL_BATICON") {
         battray::preview(&p);
         return;

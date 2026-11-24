@@ -1,0 +1,6 @@
+# razerctl hidraw backend: let the logged-in user talk to the BlackShark V3 Pro's Razer HID
+# interface directly, for when no razerkraken (OpenRazer) driver is loaded (e.g. the CachyOS EAC
+# kernel, which only loads modules signed at kernel build time).
+# 0577 = 2.4 GHz dongle, 0576 = USB-C cable.
+# Install: sudo install -m644 70-blackshark-v3pro-hidraw.rules /etc/udev/rules.d/ && sudo udevadm control --reload
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="0577|0576", MODE="0660", GROUP="users", TAG+="uaccess"

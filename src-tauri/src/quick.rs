@@ -1,7 +1,7 @@
 // Headset quick settings in the tray menus (ported from Lynapse's tray): submenus that open to the
 // right with the current value marked ●. Item ids are "q:<what>:<value>".
 
-use std::{fs, path::Path};
+use std::path::Path;
 use tauri::{
     menu::{IsMenuItem, MenuItem, Submenu},
     AppHandle, Manager, Runtime,
@@ -13,7 +13,7 @@ const FN: [&str; 4] = ["Game/Chat", "Mic Sidetone", "Footsteps", "Bluetooth Volu
 const SLEEP: [(u32, &str); 5] = [(0, "Never"), (15, "15 min"), (30, "30 min"), (45, "45 min"), (60, "60 min")];
 
 fn exists(dir: &str, attr: &str) -> bool {
-    Path::new(dir).join(attr).exists()
+    crate::bshid::exists(Path::new(dir).join(attr))
 }
 fn attr_name<'a>(dir: &str, attr: &'a str) -> &'a str {
     if exists(dir, attr) { return attr }
@@ -29,7 +29,7 @@ fn has(dir: &str, attr: &str) -> bool {
     exists(dir, attr_name(dir, attr))
 }
 fn rd(dir: &str, attr: &str) -> Option<String> {
-    fs::read_to_string(Path::new(dir).join(attr_name(dir, attr))).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && s != "-1")
+    crate::bshid::read(Path::new(dir).join(attr_name(dir, attr))).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty() && s != "-1")
 }
 fn num(dir: &str, attr: &str) -> Option<i64> {
     rd(dir, attr).and_then(|s| s.split_whitespace().next().and_then(|t| t.parse().ok()))
@@ -76,10 +76,10 @@ fn select_v3_eq(dir: &str, slot: &str) -> Result<(), String> {
         return Err("invalid V3 EQ preset".into());
     }
     let eq_slot = Path::new(dir).join("eq_slot");
-    fs::write(&eq_slot, slot.to_string()).map_err(|e| e.to_string())?;
-    let queried = fs::read_to_string(&eq_slot).map_err(|e| e.to_string())?;
+    crate::bshid::write(&eq_slot, slot.to_string()).map_err(|e| e.to_string())?;
+    let queried = crate::bshid::read(&eq_slot).map_err(|e| e.to_string())?;
     let payload = v3_eq_payload(slot, &queried)?;
-    fs::write(Path::new(dir).join("headphone_eq"), payload).map_err(|e| e.to_string())
+    crate::bshid::write(Path::new(dir).join("headphone_eq"), payload).map_err(|e| e.to_string())
 }
 
 /// Padding after a submenu label so KDE's ▸ arrow isn't jammed against the text (em spaces,
@@ -187,7 +187,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, dir: &str, id: &str) -> bool {
     let Some(rest) = id.strip_prefix("q:") else { return false };
     let parts: Vec<&str> = rest.split(':').collect();
     let w = |attr: &str, val: String| {
-        let _ = fs::write(Path::new(dir).join(attr_name(dir, attr)), val);
+        let _ = crate::bshid::write(Path::new(dir).join(attr_name(dir, attr)), val);
     };
     match parts.as_slice() {
         ["eq", n] if exists(dir, "headphone_eq") && exists(dir, "eq_slot") => {
